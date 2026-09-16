@@ -1,0 +1,19 @@
+name: Controlled Signer CI
+
+on:
+  push:
+    branches:
+      - feature/controlled-signer
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-signer-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node-install
+      - name: Run recipient role tests
+        run: npm test -w @documenso/lib -- recipients.test.ts
