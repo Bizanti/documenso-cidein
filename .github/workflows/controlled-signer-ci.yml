@@ -35,7 +35,7 @@ jobs:
           fi
           echo "RED confirmed: controlled signer behavior is not implemented yet."
 
-      - name: Align completion-page patch with v2.18
+      - name: Remove legacy completion transform from implementation helper
         shell: bash
         run: |
           python - <<'PY'
@@ -43,48 +43,71 @@ jobs:
 
           path = Path('.github/scripts/apply-controlled_signer.py')
           text = path.read_text(encoding='utf-8')
-
           start_marker = '''# ---------------------------------------------------------------------------
           # Completion page: hide share/download and show custody-aware copy
           # ---------------------------------------------------------------------------'''
           end_marker = '''# ---------------------------------------------------------------------------
           # Backend: recipient-token download and share restrictions
           # ---------------------------------------------------------------------------'''
-
           start = text.index(start_marker)
           end = text.index(end_marker, start)
+          path.write_text(text[:start] + text[end:], encoding='utf-8')
+          PY
 
-          replacement = r'''# ---------------------------------------------------------------------------
-          # Completion page: hide share/download and show custody-aware copy
-          # ---------------------------------------------------------------------------
-          complete_path = "apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx"
-          replace(
-              complete_path,
+      - name: Apply controlled signer implementation
+        run: python .github/scripts/apply-controlled_signer.py
+
+      - name: Patch v2.18 completion page
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected exactly 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
               "import { isDocumentCompleted } from '@documenso/lib/utils/document';",
               "import { isDocumentCompleted } from '@documenso/lib/utils/document';\nimport { getRecipientRoleCapabilities, isSigningRecipientRole } from '@documenso/lib/utils/recipients';",
+              'capability import',
           )
-          replace(
-              complete_path,
-              "  return (\n    <>\n      <RecipientBranding branding={branding} cspNonce={cspNonce} />\n      <div",
-              "  const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);\n  const isControlledSigner = recipient.role === RecipientRole.CONTROLLED_SIGNER;\n\n  return (\n    <>\n      <RecipientBranding branding={branding} cspNonce={cspNonce} />\n      <div",
+
+          marker = "  return (\n    <>\n      <RecipientBranding branding={branding} cspNonce={cspNonce} />\n      <div"
+          pos = text.rfind(marker)
+          if pos < 0:
+              raise RuntimeError('final return marker not found')
+          text = (
+              text[:pos]
+              + "  const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);\n"
+                "  const isControlledSigner = recipient.role === RecipientRole.CONTROLLED_SIGNER;\n\n"
+              + text[pos:]
           )
-          replace(
-              complete_path,
-              "              {recipient.role === RecipientRole.SIGNER && <Trans>Document Signed</Trans>}",
-              "              {isSigningRecipientRole(recipient.role) && <Trans>Document Signed</Trans>}",
+
+          replace_once(
+              "{recipient.role === RecipientRole.SIGNER && <Trans>Document Signed</Trans>}",
+              "{isSigningRecipientRole(recipient.role) && <Trans>Document Signed</Trans>}",
+              'signed heading',
           )
-          replace(
-              complete_path,
+
+          replace_once(
               "<Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>",
               "{isControlledSigner ? (\n                    <Trans>El documento ha finalizado y permanecerá bajo el control documental del remitente.</Trans>\n                  ) : (\n                    <Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>\n                  )}",
+              'completed copy',
           )
-          replace(
-              complete_path,
-              """<Trans>
-                    All recipients have signed. The document is being processed and you will receive an email copy
-                    shortly.
-                  </Trans>""",
-              """{isControlledSigner ? (
+
+          processing_pattern = re.compile(
+              r'<Trans>\s*All recipients have signed\. The document is being processed and you will receive an email copy\s*shortly\.\s*</Trans>',
+              re.MULTILINE,
+          )
+          processing_replacement = '''{isControlledSigner ? (
                     <Trans>
                       Todos los destinatarios han firmado. El documento se está procesando y permanecerá bajo el control
                       documental del remitente.
@@ -94,42 +117,44 @@ jobs:
                       All recipients have signed. The document is being processed and you will receive an email copy
                       shortly.
                     </Trans>
-                  )}""",
-          )
-          replace(
-              complete_path,
+                  )}'''
+          text, count = processing_pattern.subn(processing_replacement, text, count=1)
+          if count != 1:
+              raise RuntimeError(f'processing copy: expected exactly 1 match, found {count}')
+
+          replace_once(
               "<Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>",
               "{isControlledSigner ? (\n                    <Trans>Tu firma ha finalizado. Recibirás una notificación cuando el documento esté completo.</Trans>\n                  ) : (\n                    <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>\n                  )}",
-          )
-          old_share = """              <DocumentShareButton
-                documentId={document.id}
-                token={recipient.token}
-                className="w-full max-w-none md:flex-1"
-              />
-          """
-          new_share = """              {recipientCapabilities.canShare && (
-                <DocumentShareButton
-                  documentId={document.id}
-                  token={recipient.token}
-                  className="w-full max-w-none md:flex-1"
-                />
-              )}
-          """
-          replace(complete_path, old_share, new_share)
-          replace(
-              complete_path,
-              "              {isDocumentCompleted(document) && (",
-              "              {recipientCapabilities.canDownload && isDocumentCompleted(document) && (",
+              'waiting copy',
           )
 
+          share_pattern = re.compile(
+              r'(?P<indent>\s*)<DocumentShareButton\s+documentId=\{document\.id\}\s+token=\{recipient\.token\}\s+className="w-full max-w-none md:flex-1"\s*/>',
+              re.MULTILINE,
+          )
+          match = share_pattern.search(text)
+          if not match:
+              raise RuntimeError('share button block not found')
+          indent = match.group('indent')
+          share_replacement = (
+              f'{indent}{{recipientCapabilities.canShare && (\n'
+              f'{indent}  <DocumentShareButton\n'
+              f'{indent}    documentId={{document.id}}\n'
+              f'{indent}    token={{recipient.token}}\n'
+              f'{indent}    className="w-full max-w-none md:flex-1"\n'
+              f'{indent}  />\n'
+              f'{indent})}}'
+          )
+          text = text[:match.start()] + share_replacement + text[match.end():]
 
-          '''
+          replace_once(
+              "{isDocumentCompleted(document) && (",
+              "{recipientCapabilities.canDownload && isDocumentCompleted(document) && (",
+              'download condition',
+          )
 
-          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          path.write_text(text, encoding='utf-8')
           PY
-
-      - name: Apply controlled signer implementation
-        run: python .github/scripts/apply-controlled_signer.py
 
       - name: Regenerate Prisma client
         run: npm run prisma:generate
