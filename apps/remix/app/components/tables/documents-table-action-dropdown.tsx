@@ -279,7 +279,7 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
         {canShareDocument && (
           <DocumentShareButton
             documentId={row.id}
-            token={isOwner ? undefined : recipient?.token}
+            token={canManageDocument ? undefined : recipient?.token}
             trigger={({ loading, disabled }) => (
               <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
                 <div className="flex items-center">

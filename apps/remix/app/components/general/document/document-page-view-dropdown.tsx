@@ -198,7 +198,7 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
         {canShareDocument && (
           <DocumentShareButton
             documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
-            token={isOwner ? undefined : recipient?.token}
+            token={canManageDocument ? undefined : recipient?.token}
             trigger={({ loading, disabled }) => (
               <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
                 <div className="flex items-center">
