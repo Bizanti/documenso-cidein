@@ -156,6 +156,68 @@ jobs:
           path.write_text(text, encoding='utf-8')
           PY
 
+      - name: Patch exhaustive controlled signer role paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, expected=None):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if expected is not None and count != expected:
+                  raise RuntimeError(f'{path}: expected {expected} matches, found {count} for {old!r}')
+              if count == 0:
+                  raise RuntimeError(f'{path}: no matches for {old!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+              print(f'updated {path}: {count} replacement(s)')
+
+          # Authentication copy: CONTROLLED_SIGNER authenticates exactly like SIGNER.
+          for path, expected_per_target in [
+              ('apps/remix/app/components/general/document-signing/document-signing-auth-2fa.tsx', 1),
+              ('apps/remix/app/components/general/document-signing/document-signing-auth-account.tsx', 1),
+              ('apps/remix/app/components/general/document-signing/document-signing-auth-passkey.tsx', 2),
+          ]:
+              for target in ('FIELD', 'DOCUMENT'):
+                  old = f".with({{ role: RecipientRole.SIGNER, actionTarget: '{target}' }}, () =>"
+                  new = (
+                      f".with(\n"
+                      f"                {{ role: RecipientRole.SIGNER, actionTarget: '{target}' }},\n"
+                      f"                {{ role: RecipientRole.CONTROLLED_SIGNER, actionTarget: '{target}' }},\n"
+                      f"                () =>"
+                  )
+                  replace(path, old, new, expected_per_target)
+
+          # Completion/status UI: controlled signer uses signer wording/actions.
+          replace(
+              'apps/remix/app/components/general/document-signing/document-signing-complete-dialog.tsx',
+              '.with(RecipientRole.SIGNER, () =>',
+              '.with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () =>',
+              2,
+          )
+          replace(
+              'apps/remix/app/components/general/document/document-page-view-recipients.tsx',
+              '.with(RecipientRole.SIGNER, () =>',
+              '.with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () =>',
+              1,
+          )
+
+          # Embedded authoring and admin update schemas must accept the new enum value.
+          replace(
+              'apps/remix/app/components/embed/authoring/configure-document-view.types.ts',
+              "z.enum(['SIGNER', 'CC', 'APPROVER', 'VIEWER', 'ASSISTANT'])",
+              "z.enum(['SIGNER', 'CONTROLLED_SIGNER', 'CC', 'APPROVER', 'VIEWER', 'ASSISTANT'])",
+              2,
+          )
+          replace(
+              'packages/trpc/server/admin-router/update-recipient.types.ts',
+              "z.enum(['CC', 'SIGNER', 'VIEWER', 'APPROVER', 'ASSISTANT'])",
+              "z.enum(['CC', 'SIGNER', 'CONTROLLED_SIGNER', 'VIEWER', 'APPROVER', 'ASSISTANT'])",
+              1,
+          )
+          PY
+
       - name: Regenerate Prisma client
         run: npm run prisma:generate
 
