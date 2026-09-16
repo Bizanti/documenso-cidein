@@ -2,7 +2,11 @@ import { useSession } from '@documenso/lib/client-only/providers/session';
 import type { TDocumentMany as TDocumentRow } from '@documenso/lib/types/document';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { getEnvelopeItemPermissions } from '@documenso/lib/utils/envelope';
-import { findRecipientByEmail } from '@documenso/lib/utils/recipients';
+import {
+  findRecipientByEmail,
+  getRecipientRoleCapabilities,
+  isSigningRecipientRole,
+} from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath, isMemberManagerOrAbove } from '@documenso/lib/utils/teams';
 import { trpc as trpcReact } from '@documenso/trpc/react';
 import { DocumentShareButton } from '@documenso/ui/components/document/document-share-button';
@@ -77,6 +81,13 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
   const isCurrentTeamDocument = team && row.team?.url === team.url;
   const canManageDocument = Boolean(isOwner || isCurrentTeamDocument);
 
+  // Recipients without download/share capabilities (e.g. controlled signers)
+  // must not be offered actions that the backend will reject. Team members
+  // acting on their own documents keep full access via their session.
+  const recipientCapabilities = recipient ? getRecipientRoleCapabilities(recipient.role) : null;
+  const canDownloadDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canDownload;
+  const canShareDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canShare;
+
   // Cancelling a document is restricted server-side to the document owner or a
   // privileged team member (ADMIN/MANAGER). Mirror that here so plain MEMBERs
   // don't see a Cancel action that would fail on the server.
@@ -120,7 +131,7 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
                   </>
                 )}
 
-                {recipient?.role === RecipientRole.SIGNER && (
+                {recipient && isSigningRecipientRole(recipient.role) && (
                   <>
                     <Pencil className="mr-2 h-4 w-4" />
                     <Trans>Sign</Trans>
@@ -151,20 +162,22 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           </DropdownMenuItem>
         )}
 
-        <EnvelopeDownloadDialog
-          envelopeId={row.envelopeId}
-          envelopeStatus={row.status}
-          isLegacy={row.internalVersion === 1}
-          token={canManageDocument ? undefined : recipient?.token}
-          trigger={
-            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-              <div>
-                <Download className="mr-2 h-4 w-4" />
-                <Trans>Download</Trans>
-              </div>
-            </DropdownMenuItem>
-          }
-        />
+        {canDownloadDocument && (
+          <EnvelopeDownloadDialog
+            envelopeId={row.envelopeId}
+            envelopeStatus={row.status}
+            isLegacy={row.internalVersion === 1}
+            token={canManageDocument ? undefined : recipient?.token}
+            trigger={
+              <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                <div>
+                  <Download className="mr-2 h-4 w-4" />
+                  <Trans>Download</Trans>
+                </div>
+              </DropdownMenuItem>
+            }
+          />
+        )}
 
         <EnvelopeDuplicateDialog
           envelopeId={row.envelopeId}
@@ -263,18 +276,20 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           />
         )}
 
-        <DocumentShareButton
-          documentId={row.id}
-          token={isOwner ? undefined : recipient?.token}
-          trigger={({ loading, disabled }) => (
-            <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
-              <div className="flex items-center">
-                {loading ? <Loader className="mr-2 h-4 w-4" /> : <Share className="mr-2 h-4 w-4" />}
-                <Trans>Share Signing Card</Trans>
-              </div>
-            </DropdownMenuItem>
-          )}
-        />
+        {canShareDocument && (
+          <DocumentShareButton
+            documentId={row.id}
+            token={canManageDocument ? undefined : recipient?.token}
+            trigger={({ loading, disabled }) => (
+              <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
+                <div className="flex items-center">
+                  {loading ? <Loader className="mr-2 h-4 w-4" /> : <Share className="mr-2 h-4 w-4" />}
+                  <Trans>Share Signing Card</Trans>
+                </div>
+              </DropdownMenuItem>
+            )}
+          />
+        )}
       </DropdownMenuContent>
 
       <EnvelopeSaveAsTemplateDialog

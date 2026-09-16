@@ -4,7 +4,10 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   // Transform lingui macros (e.g. `msg`) used by the code under test.
   plugins: [macrosPlugin()],
+  esbuild: {
+    jsx: 'automatic',
+  },
   test: {
-    include: ['**/*.test.ts'],
+    include: ['**/*.test.ts', '**/*.test.tsx'],
   },
 });

@@ -1,4 +1,5 @@
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
+import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { Badge } from '@documenso/ui/primitives/badge';
 import { Button } from '@documenso/ui/primitives/button';
 import {
@@ -60,6 +61,7 @@ export const EnvelopeSignerHeader = () => {
             {match(recipient.role)
               .with(RecipientRole.VIEWER, () => <Trans>Viewer</Trans>)
               .with(RecipientRole.SIGNER, () => <Trans>Signer</Trans>)
+              .with(RecipientRole.CONTROLLED_SIGNER, () => <Trans>Controlled signer</Trans>)
               .with(RecipientRole.APPROVER, () => <Trans>Approver</Trans>)
               .with(RecipientRole.ASSISTANT, () => <Trans>Assistant</Trans>)
               .otherwise(() => null)}
@@ -88,6 +90,7 @@ const MobileDropdownMenu = () => {
   const { envelope, recipient } = useRequiredEnvelopeSigningContext();
 
   const { allowDocumentRejection } = useEmbedSigningContext() || {};
+  const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);
 
   return (
     <DropdownMenu>
@@ -98,20 +101,22 @@ const MobileDropdownMenu = () => {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end">
-        <EnvelopeDownloadDialog
-          envelopeId={envelope.id}
-          envelopeStatus={envelope.status}
-          envelopeItems={envelope.envelopeItems}
-          token={recipient.token}
-          trigger={
-            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-              <div>
-                <DownloadCloudIcon className="mr-2 h-4 w-4" />
-                <Trans>Download PDF</Trans>
-              </div>
-            </DropdownMenuItem>
-          }
-        />
+        {recipientCapabilities.canDownload && (
+          <EnvelopeDownloadDialog
+            envelopeId={envelope.id}
+            envelopeStatus={envelope.status}
+            envelopeItems={envelope.envelopeItems}
+            token={recipient.token}
+            trigger={
+              <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                <div>
+                  <DownloadCloudIcon className="mr-2 h-4 w-4" />
+                  <Trans>Download PDF</Trans>
+                </div>
+              </DropdownMenuItem>
+            }
+          />
+        )}
 
         {envelope.type === EnvelopeType.DOCUMENT && allowDocumentRejection !== false && (
           <DocumentSigningRejectDialog

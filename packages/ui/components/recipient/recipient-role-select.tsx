@@ -46,6 +46,28 @@ export const RecipientRoleSelect = forwardRef<HTMLButtonElement, RecipientRoleSe
           </div>
         </SelectItem>
 
+        <SelectItem value={RecipientRole.CONTROLLED_SIGNER}>
+          <div className="flex items-center">
+            <div className="flex w-[150px] items-center">
+              <span className="mr-2">{ROLE_ICONS[RecipientRole.CONTROLLED_SIGNER]}</span>
+              <Trans>Controlled signer</Trans>
+            </div>
+            <Tooltip>
+              <TooltipTrigger>
+                <InfoIcon className="h-4 w-4" />
+              </TooltipTrigger>
+              <TooltipContent className="z-9999 max-w-md p-4 text-foreground">
+                <p>
+                  <Trans>
+                    The recipient must sign the document, but cannot download or share it, and the final PDF is not
+                    attached to the completion email.
+                  </Trans>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </SelectItem>
+
         {!hideApproverRole && (
           <SelectItem value={RecipientRole.APPROVER}>
             <div className="flex items-center">

@@ -113,12 +113,16 @@ export const DocumentSigningAuthPasskey = ({
         <Alert variant="warning">
           <AlertDescription>
             {match({ role: recipient.role, actionTarget })
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'FIELD' }, () => (
-                <Trans>Your browser does not support passkeys, which is required to sign this field.</Trans>
-              ))
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' }, () => (
-                <Trans>Your browser does not support passkeys, which is required to sign this document.</Trans>
-              ))
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'FIELD' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'FIELD' },
+                () => <Trans>Your browser does not support passkeys, which is required to sign this field.</Trans>,
+              )
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'DOCUMENT' },
+                () => <Trans>Your browser does not support passkeys, which is required to sign this document.</Trans>,
+              )
               .with({ role: RecipientRole.APPROVER, actionTarget: 'FIELD' }, () => (
                 <Trans>Your browser does not support passkeys, which is required to approve this field.</Trans>
               ))
@@ -194,12 +198,16 @@ export const DocumentSigningAuthPasskey = ({
         <Alert variant="warning">
           <AlertDescription>
             {match({ role: recipient.role, actionTarget })
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'FIELD' }, () => (
-                <Trans>You need to setup a passkey to sign this field.</Trans>
-              ))
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' }, () => (
-                <Trans>You need to setup a passkey to sign this document.</Trans>
-              ))
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'FIELD' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'FIELD' },
+                () => <Trans>You need to setup a passkey to sign this field.</Trans>,
+              )
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'DOCUMENT' },
+                () => <Trans>You need to setup a passkey to sign this document.</Trans>,
+              )
               .with({ role: RecipientRole.APPROVER, actionTarget: 'FIELD' }, () => (
                 <Trans>You need to setup a passkey to approve this field.</Trans>
               ))

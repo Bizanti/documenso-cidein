@@ -1,7 +1,7 @@
 import { useSession } from '@documenso/lib/client-only/providers/session';
 import type { TDocumentMany as TDocumentRow } from '@documenso/lib/types/document';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
-import { findRecipientByEmail } from '@documenso/lib/utils/recipients';
+import { findRecipientByEmail, getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
 import { Button } from '@documenso/ui/primitives/button';
 import { Trans } from '@lingui/react/macro';
@@ -36,6 +36,7 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
   const isComplete = isDocumentCompleted(row.status);
   const isSigned = recipient?.signingStatus === SigningStatus.SIGNED;
   const role = recipient?.role;
+  const canDownload = role ? getRecipientRoleCapabilities(role).canDownload : true;
   const isCurrentTeamDocument = team && row.team?.url === team.url;
 
   const documentsPath = formatDocumentsPath(team.url);
@@ -53,6 +54,7 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
     isPending,
     isComplete,
     isSigned,
+    canDownload,
     isCurrentTeamDocument,
     internalVersion: row.internalVersion,
   })
@@ -68,7 +70,7 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
       <Button className="w-32" asChild>
         <a href={`/sign/${recipient?.token}`}>
           {match(role)
-            .with(RecipientRole.SIGNER, () => (
+            .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => (
               <>
                 <Pencil className="mr-2 -ml-1 h-4 w-4" />
                 <Trans>Sign</Trans>
@@ -95,6 +97,7 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
         <Trans>View</Trans>
       </Button>
     ))
+    .with({ isComplete: true, canDownload: false }, () => null)
     .with({ isComplete: true }, () => (
       <EnvelopeDownloadDialog
         envelopeId={row.envelopeId}

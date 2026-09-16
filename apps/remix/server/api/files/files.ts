@@ -9,7 +9,14 @@ import type { Prisma } from '@prisma/client';
 import { Hono } from 'hono';
 
 import type { HonoEnv } from '../../router';
-import { checkEnvelopeFileAccess, handleEnvelopeItemFileRequest, resolveFileUploadUserId } from './files.helpers';
+import {
+  checkEnvelopeFileAccess,
+  getFileTokenRecipient,
+  handleEnvelopeItemFileRequest,
+  isRoleRestrictedFromCompletedFile,
+  resolveFileUploadUserId,
+  shouldRestrictTokenFileAccess,
+} from './files.helpers';
 import {
   ZGetEnvelopeItemFileDownloadRequestParamsSchema,
   ZGetEnvelopeItemFileRequestParamsSchema,
@@ -271,6 +278,18 @@ export const filesRoute = new Hono<HonoEnv>()
         return c.json({ error: 'Envelope item not found' }, 404);
       }
 
+      // Controlled signers may view the document while signing, but not the
+      // final document once the envelope is completed or rejected.
+      const isViewRestricted = await shouldRestrictTokenFileAccess({
+        token,
+        envelopeId: envelopeItem.envelopeId,
+        status: envelopeItem.envelope.status,
+      });
+
+      if (isViewRestricted) {
+        return c.json({ error: 'Controlled signers are not permitted to access the final document' }, 403);
+      }
+
       if (!envelopeItem.documentData) {
         return c.json({ error: 'Document data not found' }, 404);
       }
@@ -321,6 +340,12 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (!envelopeItem) {
         return c.json({ error: 'Envelope item not found' }, 404);
+      }
+
+      const recipient = await getFileTokenRecipient(token, envelopeItem.envelopeId);
+
+      if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
+        return c.json({ error: 'Controlled signers are not permitted to download this document' }, 403);
       }
 
       if (!envelopeItem.documentData) {

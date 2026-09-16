@@ -18,6 +18,7 @@ import { z } from 'zod';
 
 const RECIPIENT_ROLE_LABELS: Record<RecipientRole, string> = {
   [RecipientRole.SIGNER]: 'Signer',
+  [RecipientRole.CONTROLLED_SIGNER]: 'Controlled signer',
   [RecipientRole.APPROVER]: 'Approver',
   [RecipientRole.CC]: 'CC',
   [RecipientRole.VIEWER]: 'Viewer',

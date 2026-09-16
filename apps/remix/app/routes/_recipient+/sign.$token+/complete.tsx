@@ -10,6 +10,7 @@ import { getRecipientByToken } from '@documenso/lib/server-only/recipient/get-re
 import { getRecipientSignatures } from '@documenso/lib/server-only/recipient/get-recipient-signatures';
 import { getUserByEmail } from '@documenso/lib/server-only/user/get-user-by-email';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
+import { getRecipientRoleCapabilities, isSigningRecipientRole } from '@documenso/lib/utils/recipients';
 import { trpc } from '@documenso/trpc/react';
 import { DocumentShareButton } from '@documenso/ui/components/document/document-share-button';
 import { SigningCard3D } from '@documenso/ui/components/signing-card';
@@ -148,6 +149,9 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
     );
   }
 
+  const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);
+  const isControlledSigner = recipient.role === RecipientRole.CONTROLLED_SIGNER;
+
   return (
     <>
       <RecipientBranding branding={branding} cspNonce={cspNonce} />
@@ -182,7 +186,7 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
             />
 
             <h2 className="mt-6 max-w-[35ch] text-center font-semibold text-2xl leading-normal md:text-3xl lg:text-4xl">
-              {recipient.role === RecipientRole.SIGNER && <Trans>Document Signed</Trans>}
+              {isSigningRecipientRole(recipient.role) && <Trans>Document Signed</Trans>}
               {recipient.role === RecipientRole.VIEWER && <Trans>Document Viewed</Trans>}
               {recipient.role === RecipientRole.APPROVER && <Trans>Document Approved</Trans>}
             </h2>
@@ -224,20 +228,37 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
             {match({ status: signingStatus, deletedAt: document.deletedAt })
               .with({ status: 'COMPLETED' }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
-                  <Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>
+                  {isControlledSigner ? (
+                    <Trans>The document has been completed and will remain under the sender's document control.</Trans>
+                  ) : (
+                    <Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>
+                  )}
                 </p>
               ))
               .with({ status: 'PROCESSING' }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
-                  <Trans>
-                    All recipients have signed. The document is being processed and you will receive an email copy
-                    shortly.
-                  </Trans>
+                  {isControlledSigner ? (
+                    <Trans>
+                      All recipients have signed. The document is being processed and will remain under the sender's
+                      document control.
+                    </Trans>
+                  ) : (
+                    <Trans>
+                      All recipients have signed. The document is being processed and you will receive an email copy
+                      shortly.
+                    </Trans>
+                  )}
                 </p>
               ))
               .with({ deletedAt: null }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
-                  <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>
+                  {isControlledSigner ? (
+                    <Trans>
+                      Your signature is complete. You will receive a notification once the document is completed.
+                    </Trans>
+                  ) : (
+                    <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>
+                  )}
                 </p>
               ))
               .otherwise(() => (
@@ -249,13 +270,15 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
               ))}
 
             <div className="mt-8 flex w-full max-w-xs flex-col items-stretch gap-4 md:w-auto md:max-w-none md:flex-row md:items-center">
-              <DocumentShareButton
-                documentId={document.id}
-                token={recipient.token}
-                className="w-full max-w-none md:flex-1"
-              />
+              {recipientCapabilities.canShare && (
+                <DocumentShareButton
+                  documentId={document.id}
+                  token={recipient.token}
+                  className="w-full max-w-none md:flex-1"
+                />
+              )}
 
-              {isDocumentCompleted(document) && (
+              {recipientCapabilities.canDownload && isDocumentCompleted(document) && (
                 <EnvelopeDownloadDialog
                   envelopeId={document.envelopeId}
                   envelopeStatus={document.status}

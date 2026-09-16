@@ -1,6 +1,7 @@
 import { useUpdateSearchParams } from '@documenso/lib/client-only/hooks/use-update-search-params';
 import { useSession } from '@documenso/lib/client-only/providers/session';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
+import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { trpc } from '@documenso/trpc/react';
 import type { TFindInboxResponse } from '@documenso/trpc/server/document-router/find-inbox.types';
 import { Button } from '@documenso/ui/primitives/button';
@@ -182,6 +183,7 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
   const isComplete = isDocumentCompleted(row.status);
   const isSigned = recipient?.signingStatus === SigningStatus.SIGNED;
   const role = recipient?.role;
+  const canDownload = role ? getRecipientRoleCapabilities(role).canDownload : true;
 
   if (!recipient) {
     return null;
@@ -196,13 +198,14 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
     isPending,
     isComplete,
     isSigned,
+    canDownload,
     internalVersion: row.internalVersion,
   })
     .with({ isPending: true, isSigned: false }, () => (
       <Button className="w-32" asChild>
         <a href={`/sign/${recipient?.token}`}>
           {match(role)
-            .with(RecipientRole.SIGNER, () => (
+            .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => (
               <>
                 <PencilIcon className="mr-2 -ml-1 h-4 w-4" />
                 <Trans>Sign</Trans>
@@ -229,6 +232,7 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
         <Trans>View</Trans>
       </Button>
     ))
+    .with({ isComplete: true, canDownload: false }, () => null)
     .with({ isComplete: true }, () => (
       <EnvelopeDownloadDialog
         envelopeId={row.envelopeId}

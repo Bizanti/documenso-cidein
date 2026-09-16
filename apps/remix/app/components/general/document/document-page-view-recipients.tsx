@@ -118,7 +118,7 @@ export const DocumentPageViewRecipients = ({ envelope, documentRootPath }: Docum
                       ),
                     )
 
-                    .with(RecipientRole.SIGNER, () => (
+                    .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => (
                       <>
                         <SignatureIcon className="mr-1 h-3 w-3" />
                         <Trans>Signed</Trans>

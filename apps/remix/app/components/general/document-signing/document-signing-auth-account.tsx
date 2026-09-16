@@ -57,23 +57,29 @@ export const DocumentSigningAuthAccount = ({
         <AlertDescription>
           <span>
             {match({ role: recipient.role, actionTarget })
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'FIELD' }, () =>
-                isDirectTemplate ? (
-                  <Trans>To sign this field, you need to be logged in.</Trans>
-                ) : (
-                  <Trans>
-                    To sign this field, you need to be logged in as <strong>{recipient.email}</strong>
-                  </Trans>
-                ),
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'FIELD' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'FIELD' },
+                () =>
+                  isDirectTemplate ? (
+                    <Trans>To sign this field, you need to be logged in.</Trans>
+                  ) : (
+                    <Trans>
+                      To sign this field, you need to be logged in as <strong>{recipient.email}</strong>
+                    </Trans>
+                  ),
               )
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' }, () =>
-                isDirectTemplate ? (
-                  <Trans>To sign this document, you need to be logged in.</Trans>
-                ) : (
-                  <Trans>
-                    To sign this document, you need to be logged in as <strong>{recipient.email}</strong>
-                  </Trans>
-                ),
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'DOCUMENT' },
+                () =>
+                  isDirectTemplate ? (
+                    <Trans>To sign this document, you need to be logged in.</Trans>
+                  ) : (
+                    <Trans>
+                      To sign this document, you need to be logged in as <strong>{recipient.email}</strong>
+                    </Trans>
+                  ),
               )
               .with({ role: RecipientRole.APPROVER, actionTarget: 'FIELD' }, () =>
                 isDirectTemplate ? (
