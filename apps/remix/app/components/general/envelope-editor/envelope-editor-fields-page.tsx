@@ -180,7 +180,10 @@ export const EnvelopeEditorFieldsPage = () => {
    */
   useEffect(() => {
     const firstSelectableRecipient = envelope.recipients.find(
-      (recipient) => recipient.role === RecipientRole.SIGNER || recipient.role === RecipientRole.APPROVER,
+      (recipient) =>
+        recipient.role === RecipientRole.SIGNER ||
+        recipient.role === RecipientRole.CONTROLLED_SIGNER ||
+        recipient.role === RecipientRole.APPROVER,
     );
 
     editorFields.setSelectedRecipient(firstSelectableRecipient?.id ?? null);

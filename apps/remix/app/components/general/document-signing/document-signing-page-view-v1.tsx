@@ -204,7 +204,7 @@ export const DocumentSigningPageViewV1 = ({
                     </Trans>
                   ),
                 )
-                .with(RecipientRole.SIGNER, () =>
+                .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () =>
                   includeSenderDetails ? (
                     <Trans>
                       <span className="truncate" title={senderName}>
@@ -295,7 +295,7 @@ export const DocumentSigningPageViewV1 = ({
                 <h3 className="font-semibold text-foreground text-xl md:text-2xl">
                   {match(recipient.role)
                     .with(RecipientRole.VIEWER, () => <Trans>View Document</Trans>)
-                    .with(RecipientRole.SIGNER, () => <Trans>Sign Document</Trans>)
+                    .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => <Trans>Sign Document</Trans>)
                     .with(RecipientRole.APPROVER, () => <Trans>Approve Document</Trans>)
                     .with(RecipientRole.ASSISTANT, () => <Trans>Assist Document</Trans>)
                     .otherwise(() => null)}
@@ -350,7 +350,9 @@ export const DocumentSigningPageViewV1 = ({
                 <p className="mt-2 text-muted-foreground text-sm">
                   {match(recipient.role)
                     .with(RecipientRole.VIEWER, () => <Trans>Please mark as viewed to complete.</Trans>)
-                    .with(RecipientRole.SIGNER, () => <Trans>Please review the document before signing.</Trans>)
+                    .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => (
+                      <Trans>Please review the document before signing.</Trans>
+                    ))
                     .with(RecipientRole.APPROVER, () => <Trans>Please review the document before approving.</Trans>)
                     .with(RecipientRole.ASSISTANT, () => <Trans>Complete the fields for the following signers.</Trans>)
                     .otherwise(() => null)}

@@ -179,6 +179,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
 
   await Promise.all(
     recipientsToNotify.map(async (recipient) => {
+      const isControlledSigner = recipient.role === RecipientRole.CONTROLLED_SIGNER;
       // A CC recipient never asked to be part of this document, so their completion
       // email is effectively unsolicited. Meter it against the organisation email
       // quota/stats so it is correctly logged.
@@ -222,6 +223,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
             ? renderCustomEmailTemplate(envelope.documentMeta.message, customEmailTemplate)
             : undefined,
         reportUrl,
+        allowDownload: !isControlledSigner,
       });
 
       const [html, text] = await Promise.all([
@@ -250,7 +252,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
             : i18n._(msg`Signing Complete!`),
         html,
         text,
-        attachments: completedDocumentEmailAttachments,
+        attachments: isControlledSigner ? [] : completedDocumentEmailAttachments,
       });
 
       await prisma.documentAuditLog.create({

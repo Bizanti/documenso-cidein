@@ -1,6 +1,7 @@
 import { useCurrentEnvelopeRender } from '@documenso/lib/client-only/providers/envelope-render-provider';
 import { PDF_VIEWER_ERROR_MESSAGES } from '@documenso/lib/constants/pdf-viewer-i18n';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
+import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { cn } from '@documenso/ui/lib/utils';
 import { Button } from '@documenso/ui/primitives/button';
 import { Separator } from '@documenso/ui/primitives/separator';
@@ -65,6 +66,7 @@ export const DocumentSigningPageViewV2 = () => {
 
   const { t } = useLingui();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);
 
   /**
    * The total remaining fields remaining for the current recipient or selected assistant recipient.
@@ -119,7 +121,7 @@ export const DocumentSigningPageViewV2 = () => {
               <h3 className="flex items-end justify-between font-semibold text-foreground text-sm">
                 {match(recipient.role)
                   .with(RecipientRole.VIEWER, () => <Trans>View Document</Trans>)
-                  .with(RecipientRole.SIGNER, () => <Trans>Sign Document</Trans>)
+                  .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => <Trans>Sign Document</Trans>)
                   .with(RecipientRole.APPROVER, () => <Trans>Approve Document</Trans>)
                   .with(RecipientRole.ASSISTANT, () => <Trans>Assist Document</Trans>)
                   .otherwise(() => null)}
@@ -180,18 +182,20 @@ export const DocumentSigningPageViewV2 = () => {
                   }
                 />
 
-                <EnvelopeDownloadDialog
-                  envelopeId={envelope.id}
-                  envelopeStatus={envelope.status}
-                  envelopeItems={envelope.envelopeItems}
-                  token={recipient.token}
-                  trigger={
-                    <Button variant="ghost" size="sm" className="w-full justify-start">
-                      <DownloadCloudIcon className="mr-2 h-4 w-4" />
-                      <Trans>Download PDF</Trans>
-                    </Button>
-                  }
-                />
+                {recipientCapabilities.canDownload && (
+                  <EnvelopeDownloadDialog
+                    envelopeId={envelope.id}
+                    envelopeStatus={envelope.status}
+                    envelopeItems={envelope.envelopeItems}
+                    token={recipient.token}
+                    trigger={
+                      <Button variant="ghost" size="sm" className="w-full justify-start">
+                        <DownloadCloudIcon className="mr-2 h-4 w-4" />
+                        <Trans>Download PDF</Trans>
+                      </Button>
+                    }
+                  />
+                )}
 
                 {envelope.type === EnvelopeType.DOCUMENT && allowDocumentRejection && (
                   <DocumentSigningRejectDialog

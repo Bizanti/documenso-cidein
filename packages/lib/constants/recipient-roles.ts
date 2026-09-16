@@ -69,6 +69,28 @@ export const RECIPIENT_ROLES_DESCRIPTION = {
       context: `Recipient role plural name`,
     }),
   },
+  [RecipientRole.CONTROLLED_SIGNER]: {
+    actionVerb: msg({
+      message: `Sign`,
+      context: `Recipient role action verb`,
+    }),
+    actioned: msg({
+      message: `Signed`,
+      context: `Recipient role actioned`,
+    }),
+    progressiveVerb: msg({
+      message: `Signing`,
+      context: `Recipient role progressive verb`,
+    }),
+    roleName: msg({
+      message: `Controlled signer`,
+      context: `Recipient role name`,
+    }),
+    roleNamePlural: msg({
+      message: `Controlled signers`,
+      context: `Recipient role plural name`,
+    }),
+  },
   [RecipientRole.VIEWER]: {
     actionVerb: msg({
       message: `View`,
@@ -117,12 +139,14 @@ export const RECIPIENT_ROLES_DESCRIPTION = {
 
 export const RECIPIENT_ROLE_TO_DISPLAY_TYPE = {
   [RecipientRole.SIGNER]: `SIGNING_REQUEST`,
+  [RecipientRole.CONTROLLED_SIGNER]: `SIGNING_REQUEST`,
   [RecipientRole.VIEWER]: `VIEW_REQUEST`,
   [RecipientRole.APPROVER]: `APPROVE_REQUEST`,
 } as const;
 
 export const RECIPIENT_ROLE_TO_EMAIL_TYPE = {
   [RecipientRole.SIGNER]: `SIGNING_REQUEST`,
+  [RecipientRole.CONTROLLED_SIGNER]: `SIGNING_REQUEST`,
   [RecipientRole.VIEWER]: `VIEW_REQUEST`,
   [RecipientRole.APPROVER]: `APPROVE_REQUEST`,
   [RecipientRole.ASSISTANT]: `ASSISTING_REQUEST`,
@@ -130,6 +154,7 @@ export const RECIPIENT_ROLE_TO_EMAIL_TYPE = {
 
 export const RECIPIENT_ROLE_SIGNING_REASONS = {
   [RecipientRole.SIGNER]: msg`I am a signer of this document`,
+  [RecipientRole.CONTROLLED_SIGNER]: msg`I am a controlled signer of this document`,
   [RecipientRole.APPROVER]: msg`I am an approver of this document`,
   [RecipientRole.CC]: msg`I am required to receive a copy of this document`,
   [RecipientRole.VIEWER]: msg`I am a viewer of this document`,

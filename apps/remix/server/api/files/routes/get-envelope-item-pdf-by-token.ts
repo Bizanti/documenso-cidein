@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import type { HonoEnv } from '../../../router';
+import { shouldRestrictTokenFileAccess } from '../files.helpers';
 import { handleEnvelopeItemPdfRequest } from './get-envelope-item-pdf';
 
 const route = new Hono<HonoEnv>();
@@ -61,11 +62,30 @@ route.get(
       where: envelopeItemWhereQuery,
       include: {
         documentData: true,
+        envelope: {
+          select: {
+            status: true,
+          },
+        },
       },
     });
 
     if (!envelopeItem) {
       return c.json({ error: 'Not found' }, 404);
+    }
+
+    // Controlled signers may view the document while signing, but not the
+    // final document once the envelope is completed or rejected.
+    const isRestricted =
+      version === 'current' &&
+      (await shouldRestrictTokenFileAccess({
+        token,
+        envelopeId,
+        status: envelopeItem.envelope.status,
+      }));
+
+    if (isRestricted) {
+      return c.json({ error: 'Controlled signers are not permitted to access the final document' }, 403);
     }
 
     return await handleEnvelopeItemPdfRequest({

@@ -5,6 +5,7 @@ import { generatePartialSignedPdf } from '@documenso/lib/server-only/pdf/generat
 import { getTeamById } from '@documenso/lib/server-only/team/get-team';
 import { sha256 } from '@documenso/lib/universal/crypto';
 import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.server';
+import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
 import {
   type DocumentDataType,
@@ -264,6 +265,71 @@ type CheckEnvelopeFileAccessOptions = {
   teamId: number;
   envelopeType: EnvelopeType;
   templateType: TemplateType;
+};
+
+/**
+ * Returns the recipient a recipient file token belongs to.
+ *
+ * QR tokens do not map to a recipient and always return null.
+ */
+export const getFileTokenRecipient = (token: string, envelopeId: string) => {
+  if (token.startsWith('qr_')) {
+    return Promise.resolve(null);
+  }
+
+  return prisma.recipient.findFirst({
+    where: {
+      token,
+      envelopeId,
+    },
+    select: {
+      role: true,
+    },
+  });
+};
+
+/**
+ * Whether a recipient role is restricted from obtaining the final document.
+ *
+ * Controlled signers can view the document while signing, but must not receive
+ * the final document once the envelope reaches a final status.
+ */
+export const isRoleRestrictedFromCompletedFile = (role: RecipientRole): boolean => {
+  return !getRecipientRoleCapabilities(role).receivesCompletedPdf;
+};
+
+/**
+ * Envelope statuses in which the stored document data represents the final
+ * document: completed, or rejected with the collected signatures burned in.
+ */
+export const isFinalDocumentStatus = (status: DocumentStatus): boolean => {
+  return status === DocumentStatus.COMPLETED || status === DocumentStatus.REJECTED;
+};
+
+type ShouldRestrictTokenFileAccessOptions = {
+  token: string;
+  envelopeId: string;
+  status: DocumentStatus;
+};
+
+/**
+ * Whether a recipient file token must be denied access to the stored document.
+ *
+ * Returns true when the envelope is in a final status and the token belongs to
+ * a recipient whose role may not obtain the final document.
+ */
+export const shouldRestrictTokenFileAccess = async ({
+  token,
+  envelopeId,
+  status,
+}: ShouldRestrictTokenFileAccessOptions): Promise<boolean> => {
+  if (!isFinalDocumentStatus(status)) {
+    return false;
+  }
+
+  const recipient = await getFileTokenRecipient(token, envelopeId);
+
+  return recipient !== null && isRoleRestrictedFromCompletedFile(recipient.role);
 };
 
 /**
