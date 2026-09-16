@@ -1,5 +1,5 @@
 import { prisma } from '@documenso/prisma';
-import { EnvelopeType } from '@prisma/client';
+import { EnvelopeType, RecipientRole } from '@prisma/client';
 import { match, P } from 'ts-pattern';
 
 import { AppError, AppErrorCode } from '../../errors/app-error';
@@ -38,14 +38,24 @@ export const createOrGetShareLink = async ({ documentId, ...options }: CreateSha
 
   const email = await match(options)
     .with({ token: P.string }, async ({ token }) => {
-      return await prisma.recipient
-        .findFirst({
-          where: {
-            envelopeId: envelope.id,
-            token,
-          },
-        })
-        .then((recipient) => recipient?.email);
+      const recipient = await prisma.recipient.findFirst({
+        where: {
+          envelopeId: envelope.id,
+          token,
+        },
+        select: {
+          email: true,
+          role: true,
+        },
+      });
+
+      if (recipient?.role === RecipientRole.CONTROLLED_SIGNER) {
+        throw new AppError(AppErrorCode.FORBIDDEN, {
+          message: 'Controlled signers are not permitted to create document share links',
+        });
+      }
+
+      return recipient?.email;
     })
     .with({ userId: P.number }, async ({ userId }) => {
       // Ensure the authenticated user actually has visibility-aware access to the

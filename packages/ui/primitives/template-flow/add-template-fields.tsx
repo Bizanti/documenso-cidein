@@ -445,6 +445,7 @@ export const AddTemplateFieldsFormPartial = ({
       CC: [],
       VIEWER: [],
       SIGNER: [],
+      CONTROLLED_SIGNER: [],
       APPROVER: [],
       ASSISTANT: [],
     };

@@ -8,12 +8,25 @@ import type { TRecipientLite } from '../types/recipient';
 import { extractLegacyIds } from '../universal/id';
 import { zEmail } from './zod';
 
+export const isSigningRecipientRole = (role: RecipientRole) =>
+  role === RecipientRole.SIGNER || role === RecipientRole.CONTROLLED_SIGNER;
+
+export const getRecipientRoleCapabilities = (role: RecipientRole) => ({
+  canSign: isSigningRecipientRole(role),
+  canDownload: role !== RecipientRole.CONTROLLED_SIGNER,
+  canShare: role !== RecipientRole.CONTROLLED_SIGNER,
+  receivesCompletedPdf: role !== RecipientRole.CONTROLLED_SIGNER,
+});
+
 /**
  * Roles that require fields to be assigned before a document can be distributed.
  *
- * Currently only SIGNER requires a signature field.
+ * SIGNER and CONTROLLED_SIGNER recipients require a signature field.
  */
-export const RECIPIENT_ROLES_THAT_REQUIRE_FIELDS = [RecipientRole.SIGNER] as const;
+export const RECIPIENT_ROLES_THAT_REQUIRE_FIELDS = [
+  RecipientRole.SIGNER,
+  RecipientRole.CONTROLLED_SIGNER,
+] as const;
 
 // signingOrder isn't required when submitting the recipient form (Zod: z.number().optional())
 type RecipientWithSigningOrder = Pick<Recipient, 'role'> & Partial<Pick<Recipient, 'signingOrder'>>;
@@ -70,14 +83,14 @@ export const normalizeRecipientSigningOrders = <T extends RecipientWithSigningOr
 /**
  * Returns recipients who are missing required fields for their role.
  *
- * Currently only SIGNERs are validated - they must have at least one signature field.
+ * SIGNER and CONTROLLED_SIGNER recipients are validated - they must have at least one signature field.
  */
 export const getRecipientsWithMissingFields = <T extends Pick<TRecipientLite, 'id' | 'role'>>(
   recipients: T[],
   fields: Pick<Field, 'type' | 'recipientId'>[],
 ): T[] => {
   return recipients.filter((recipient) => {
-    if (recipient.role === RecipientRole.SIGNER) {
+    if (isSigningRecipientRole(recipient.role)) {
       const hasSignatureField = fields.some(
         (field) => field.recipientId === recipient.id && isSignatureFieldType(field.type),
       );

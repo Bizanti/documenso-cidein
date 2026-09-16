@@ -8,6 +8,7 @@ export interface TemplateDocumentCompletedProps {
   documentName: string;
   assetBaseUrl: string;
   customBody?: string;
+  allowDownload?: boolean;
 }
 
 export const TemplateDocumentCompleted = ({
@@ -15,6 +16,7 @@ export const TemplateDocumentCompleted = ({
   documentName,
   assetBaseUrl,
   customBody,
+  allowDownload = true,
 }: TemplateDocumentCompletedProps) => {
   const getAssetUrl = (path: string) => {
     return new URL(path, assetBaseUrl).toString();
@@ -42,19 +44,34 @@ export const TemplateDocumentCompleted = ({
           {customBody || <Trans>“{documentName}” was signed by all signers</Trans>}
         </Text>
 
-        <Text className="my-1 text-center text-base text-muted-foreground">
-          <Trans>Continue by downloading the document.</Trans>
-        </Text>
+        {allowDownload ? (
+          <>
+            <Text className="my-1 text-center text-base text-muted-foreground">
+              <Trans>Continue by downloading the document.</Trans>
+            </Text>
 
-        <Section className="mt-8 mb-6 text-center">
-          <Button
-            className="rounded-lg border border-border border-solid px-4 py-2 text-center font-medium text-foreground text-sm no-underline"
-            href={downloadLink}
-          >
-            <Img src={getAssetUrl('/static/download.png')} className="mr-2 mb-0.5 inline h-5 w-5 align-middle" alt="" />
-            <Trans>Download</Trans>
-          </Button>
-        </Section>
+            <Section className="mt-8 mb-6 text-center">
+              <Button
+                className="rounded-lg border border-border border-solid px-4 py-2 text-center font-medium text-foreground text-sm no-underline"
+                href={downloadLink}
+              >
+                <Img
+                  src={getAssetUrl('/static/download.png')}
+                  className="mr-2 mb-0.5 inline h-5 w-5 align-middle"
+                  alt=""
+                />
+                <Trans>Download</Trans>
+              </Button>
+            </Section>
+          </>
+        ) : (
+          <Text className="my-4 text-center text-base text-muted-foreground">
+            <Trans>
+              El proceso de firma ha finalizado. El documento permanece bajo el control documental del remitente y no se
+              adjunta a este correo.
+            </Trans>
+          </Text>
+        )}
       </Section>
     </>
   );

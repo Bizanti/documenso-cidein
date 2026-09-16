@@ -102,6 +102,7 @@ export const EnvelopeRecipientSelectorCommand = ({
       CC: [],
       VIEWER: [],
       SIGNER: [],
+      CONTROLLED_SIGNER: [],
       APPROVER: [],
       ASSISTANT: [],
     };

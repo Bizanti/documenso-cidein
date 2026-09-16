@@ -5,7 +5,7 @@ import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embeddin
 import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { prisma } from '@documenso/prisma';
 import { sValidator } from '@hono/standard-validator';
-import type { Prisma } from '@prisma/client';
+import { RecipientRole, type Prisma } from '@prisma/client';
 import { Hono } from 'hono';
 
 import type { HonoEnv } from '../../router';
@@ -321,6 +321,22 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (!envelopeItem) {
         return c.json({ error: 'Envelope item not found' }, 404);
+      }
+
+      if (!token.startsWith('qr_')) {
+        const recipient = await prisma.recipient.findFirst({
+          where: {
+            token,
+            envelopeId: envelopeItem.envelopeId,
+          },
+          select: {
+            role: true,
+          },
+        });
+
+        if (recipient?.role === RecipientRole.CONTROLLED_SIGNER) {
+          return c.json({ error: 'Controlled signers are not permitted to download this document' }, 403);
+        }
       }
 
       if (!envelopeItem.documentData) {

@@ -37,6 +37,7 @@ export const RecipientSelector = ({
       CC: [],
       VIEWER: [],
       SIGNER: [],
+      CONTROLLED_SIGNER: [],
       APPROVER: [],
       ASSISTANT: [],
     };

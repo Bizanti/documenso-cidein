@@ -1,154 +1,83 @@
 import { SUPPORT_EMAIL } from '@documenso/lib/constants/app';
 import { Button } from '@documenso/ui/primitives/button';
-import { Trans } from '@lingui/react/macro';
 import { Link } from 'react-router';
 
 export default function SignatureDisclosure() {
   return (
     <div>
       <article className="prose dark:prose-invert">
-        <h1>
-          <Trans>Electronic Signature Disclosure</Trans>
-        </h1>
+        <h1>Divulgación sobre firma electrónica y acceso al documento</h1>
 
-        <h2>
-          <Trans>Welcome</Trans>
-        </h2>
+        <h2>Finalidad</h2>
         <p>
-          <Trans>
-            Thank you for using Documenso to perform your electronic document signing. The purpose of this disclosure is
-            to inform you about the process, legality, and your rights regarding the use of electronic signatures on our
-            platform. By opting to use an electronic signature, you are agreeing to the terms and conditions outlined
-            below.
-          </Trans>
+          Este servicio permite revisar y firmar documentos por medios electrónicos. Al continuar con el proceso de
+          firma, aceptas utilizar medios electrónicos para realizar las acciones que el remitente te haya asignado.
         </p>
 
-        <h2>
-          <Trans>Acceptance and Consent</Trans>
-        </h2>
+        <h2>Firma electrónica y evidencia</h2>
         <p>
-          <Trans>
-            When you use our platform to affix your electronic signature to documents, you are consenting to do so under
-            the Electronic Signatures in Global and National Commerce Act (E-Sign Act) and other applicable laws. This
-            action indicates your agreement to use electronic means to sign documents and receive notifications.
-          </Trans>
+          El sistema registra información asociada al proceso de firma, incluyendo el destinatario, las acciones
+          realizadas y las marcas de tiempo disponibles. Estos registros forman parte de la evidencia electrónica del
+          proceso. Los efectos jurídicos de una firma electrónica dependen de la legislación aplicable, del tipo de
+          documento y de las condiciones concretas de la operación.
         </p>
 
-        <h2>
-          <Trans>Legality of Electronic Signatures</Trans>
-        </h2>
+        <h2>Identidad y uso personal</h2>
         <p>
-          <Trans>
-            An electronic signature provided by you on our platform, achieved through clicking through to a document and
-            entering your name, or any other electronic signing method we provide, is legally binding. It carries the
-            same weight and enforceability as a manual signature written with ink on paper.
-          </Trans>
+          Los medios de acceso y autenticación asignados a cada destinatario son personales. No debes compartir
+          contraseñas, códigos, enlaces de acceso autenticado ni otros factores utilizados para confirmar tu identidad.
         </p>
 
-        <h2>
-          <Trans>System Requirements</Trans>
-        </h2>
+        <h2>Acceso al documento y control documental</h2>
         <p>
-          <Trans>To use our electronic signature service, you must have access to:</Trans>
+          La posibilidad de descargar, imprimir, compartir o recibir una copia del documento final depende de la política
+          de acceso definida por el remitente y por su sistema de control documental.
         </p>
-        <ul>
-          <li>
-            <Trans>A stable internet connection</Trans>
-          </li>
-          <li>
-            <Trans>An email account</Trans>
-          </li>
-          <li>
-            <Trans>A device capable of accessing, opening, and reading documents</Trans>
-          </li>
-          <li>
-            <Trans>A means to print or download documents for your records</Trans>
-          </li>
-        </ul>
-
-        <h2>
-          <Trans>Electronic Delivery of Documents</Trans>
-        </h2>
         <p>
-          <Trans>
-            All documents related to the electronic signing process will be provided to you electronically through our
-            platform or via email. It is your responsibility to ensure that your email address is current and that you
-            can receive and open our emails.
-          </Trans>
+          Los destinatarios designados como <strong>Firmante controlado</strong> pueden revisar el documento durante el
+          proceso y realizar su firma, pero no disponen de funciones para descargar o compartir el documento mediante
+          este flujo y el PDF final no se adjunta a su correo de finalización. El documento terminado permanece bajo la
+          custodia y el control documental del remitente. Si necesitas una copia o acceso posterior, deberás solicitarlo
+          al remitente conforme a sus procedimientos autorizados.
         </p>
 
-        <h2>
-          <Trans>Consent to Electronic Transactions</Trans>
-        </h2>
+        <h2>Notificaciones electrónicas</h2>
         <p>
-          <Trans>
-            By using the electronic signature feature, you are consenting to conduct transactions and receive
-            disclosures electronically. You acknowledge that your electronic signature on documents is binding and that
-            you accept the terms outlined in the documents you are signing.
-          </Trans>
+          El sistema puede enviar por correo electrónico invitaciones, recordatorios y avisos de finalización. Recibir un
+          aviso de finalización no implica necesariamente autorización para descargar, compartir o recibir como adjunto
+          el documento final.
         </p>
 
-        <h2>
-          <Trans>Withdrawing Consent</Trans>
-        </h2>
+        <h2>Retiro del consentimiento antes de firmar</h2>
         <p>
-          <Trans>
-            You have the right to withdraw your consent to use electronic signatures at any time before completing the
-            signing process. To withdraw your consent, please contact the sender of the document. In failing to contact
-            the sender you may reach out to <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for assistance. Be
-            aware that withdrawing consent may delay or halt the completion of the related transaction or service.
-          </Trans>
+          Si no deseas continuar mediante firma electrónica, comunícate con el remitente antes de completar tu firma. La
+          disponibilidad de un procedimiento alternativo dependerá del remitente y de los requisitos aplicables al
+          documento.
         </p>
 
-        <h2>
-          <Trans>Updating Your Information</Trans>
-        </h2>
+        <h2>Conservación e integridad</h2>
         <p>
-          <Trans>
-            It is crucial to keep your contact information, especially your email address, up to date with us. Please
-            notify us immediately of any changes to ensure that you continue to receive all necessary communications.
-          </Trans>
+          El remitente es responsable de definir los periodos de conservación, controles de acceso y procedimientos de
+          custodia aplicables a sus documentos. Las restricciones de descarga no sustituyen los controles de seguridad,
+          trazabilidad, respaldo y conservación que correspondan al sistema de gestión documental.
         </p>
 
-        <h2>
-          <Trans>Retention of Documents</Trans>
-        </h2>
+        <h2>Aceptación</h2>
         <p>
-          <Trans>
-            After signing a document electronically, you will be provided the opportunity to view, download, and print
-            the document for your records. It is highly recommended that you retain a copy of all electronically signed
-            documents for your personal records. We will also retain a copy of the signed document for our records
-            however we may not be able to provide you with a copy of the signed document after a certain period of time.
-          </Trans>
+          Al continuar, confirmas que has podido acceder al documento que se te presenta, que comprendes el uso de medios
+          electrónicos para esta operación y que realizarás únicamente las acciones que te han sido asignadas.
         </p>
 
-        <h2>
-          <Trans>Acknowledgment</Trans>
-        </h2>
+        <h2>Contacto</h2>
         <p>
-          <Trans>
-            By proceeding to use the electronic signature service provided by Documenso, you affirm that you have read
-            and understood this disclosure. You agree to all terms and conditions related to the use of electronic
-            signatures and electronic transactions as outlined herein.
-          </Trans>
-        </p>
-
-        <h2>
-          <Trans>Contact Information</Trans>
-        </h2>
-        <p>
-          <Trans>
-            For any questions regarding this disclosure, electronic signatures, or any related process, please contact
-            us at: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
-          </Trans>
+          Si tienes dudas sobre este proceso o necesitas solicitar acceso a un documento, comunícate con el remitente. Para
+          asistencia técnica también puedes escribir a <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
         </p>
       </article>
 
       <div className="mt-8">
         <Button asChild>
-          <Link to="/">
-            <Trans>Back home</Trans>
-          </Link>
+          <Link to="/">Volver al inicio</Link>
         </Button>
       </div>
     </div>

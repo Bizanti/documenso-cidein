@@ -5,7 +5,7 @@ export const ZUpdateRecipientRequestSchema = z.object({
   id: z.number().min(1),
   name: z.string().optional(),
   email: zEmail().optional(),
-  role: z.enum(['CC', 'SIGNER', 'VIEWER', 'APPROVER', 'ASSISTANT']).optional(),
+  role: z.enum(['CC', 'SIGNER', 'CONTROLLED_SIGNER', 'VIEWER', 'APPROVER', 'ASSISTANT']).optional(),
 });
 
 export const ZUpdateRecipientResponseSchema = z.void();
