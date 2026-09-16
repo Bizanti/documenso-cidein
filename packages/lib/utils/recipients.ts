@@ -8,26 +8,12 @@ import type { TRecipientLite } from '../types/recipient';
 import { extractLegacyIds } from '../universal/id';
 import { zEmail } from './zod';
 
-export const isSigningRecipientRole = (role: RecipientRole) => {
-  return role === RecipientRole.SIGNER || role === RecipientRole.CONTROLLED_SIGNER;
-};
-
-export const getRecipientRoleCapabilities = (role: RecipientRole) => ({
-  canSign: isSigningRecipientRole(role),
-  canDownload: role !== RecipientRole.CONTROLLED_SIGNER,
-  canShare: role !== RecipientRole.CONTROLLED_SIGNER,
-  receivesCompletedPdf: role !== RecipientRole.CONTROLLED_SIGNER,
-});
-
 /**
  * Roles that require fields to be assigned before a document can be distributed.
  *
- * SIGNER and CONTROLLED_SIGNER require a signature field.
+ * Currently only SIGNER requires a signature field.
  */
-export const RECIPIENT_ROLES_THAT_REQUIRE_FIELDS = [
-  RecipientRole.SIGNER,
-  RecipientRole.CONTROLLED_SIGNER,
-] as const;
+export const RECIPIENT_ROLES_THAT_REQUIRE_FIELDS = [RecipientRole.SIGNER] as const;
 
 // signingOrder isn't required when submitting the recipient form (Zod: z.number().optional())
 type RecipientWithSigningOrder = Pick<Recipient, 'role'> & Partial<Pick<Recipient, 'signingOrder'>>;
@@ -84,14 +70,14 @@ export const normalizeRecipientSigningOrders = <T extends RecipientWithSigningOr
 /**
  * Returns recipients who are missing required fields for their role.
  *
- * SIGNER and CONTROLLED_SIGNER recipients must have at least one signature field.
+ * Currently only SIGNERs are validated - they must have at least one signature field.
  */
 export const getRecipientsWithMissingFields = <T extends Pick<TRecipientLite, 'id' | 'role'>>(
   recipients: T[],
   fields: Pick<Field, 'type' | 'recipientId'>[],
 ): T[] => {
   return recipients.filter((recipient) => {
-    if (isSigningRecipientRole(recipient.role)) {
+    if (recipient.role === RecipientRole.SIGNER) {
       const hasSignatureField = fields.some(
         (field) => field.recipientId === recipient.id && isSignatureFieldType(field.type),
       );
