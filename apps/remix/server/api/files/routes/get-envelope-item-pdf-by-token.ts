@@ -1,11 +1,11 @@
 import { prisma } from '@documenso/prisma';
 import { sValidator } from '@hono/standard-validator';
-import { DocumentStatus, type Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
 import type { HonoEnv } from '../../../router';
-import { getFileTokenRecipient, isRoleRestrictedFromCompletedFile } from '../files.helpers';
+import { shouldRestrictTokenFileAccess } from '../files.helpers';
 import { handleEnvelopeItemPdfRequest } from './get-envelope-item-pdf';
 
 const route = new Hono<HonoEnv>();
@@ -75,13 +75,17 @@ route.get(
     }
 
     // Controlled signers may view the document while signing, but not the
-    // final signed PDF once the envelope is completed.
-    if (version === 'current' && envelopeItem.envelope.status === DocumentStatus.COMPLETED) {
-      const recipient = await getFileTokenRecipient(token, envelopeId);
+    // final document once the envelope is completed or rejected.
+    const isRestricted =
+      version === 'current' &&
+      (await shouldRestrictTokenFileAccess({
+        token,
+        envelopeId,
+        status: envelopeItem.envelope.status,
+      }));
 
-      if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
-        return c.json({ error: 'Controlled signers are not permitted to access the completed document' }, 403);
-      }
+    if (isRestricted) {
+      return c.json({ error: 'Controlled signers are not permitted to access the final document' }, 403);
     }
 
     return await handleEnvelopeItemPdfRequest({

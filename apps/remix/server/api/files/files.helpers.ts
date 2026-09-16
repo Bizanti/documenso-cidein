@@ -289,13 +289,47 @@ export const getFileTokenRecipient = (token: string, envelopeId: string) => {
 };
 
 /**
- * Whether a recipient role is restricted from obtaining the completed document.
+ * Whether a recipient role is restricted from obtaining the final document.
  *
  * Controlled signers can view the document while signing, but must not receive
- * the final signed PDF once the envelope is completed.
+ * the final document once the envelope reaches a final status.
  */
 export const isRoleRestrictedFromCompletedFile = (role: RecipientRole): boolean => {
   return !getRecipientRoleCapabilities(role).receivesCompletedPdf;
+};
+
+/**
+ * Envelope statuses in which the stored document data represents the final
+ * document: completed, or rejected with the collected signatures burned in.
+ */
+export const isFinalDocumentStatus = (status: DocumentStatus): boolean => {
+  return status === DocumentStatus.COMPLETED || status === DocumentStatus.REJECTED;
+};
+
+type ShouldRestrictTokenFileAccessOptions = {
+  token: string;
+  envelopeId: string;
+  status: DocumentStatus;
+};
+
+/**
+ * Whether a recipient file token must be denied access to the stored document.
+ *
+ * Returns true when the envelope is in a final status and the token belongs to
+ * a recipient whose role may not obtain the final document.
+ */
+export const shouldRestrictTokenFileAccess = async ({
+  token,
+  envelopeId,
+  status,
+}: ShouldRestrictTokenFileAccessOptions): Promise<boolean> => {
+  if (!isFinalDocumentStatus(status)) {
+    return false;
+  }
+
+  const recipient = await getFileTokenRecipient(token, envelopeId);
+
+  return recipient !== null && isRoleRestrictedFromCompletedFile(recipient.role);
 };
 
 /**

@@ -5,7 +5,7 @@ import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embeddin
 import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { prisma } from '@documenso/prisma';
 import { sValidator } from '@hono/standard-validator';
-import { DocumentStatus, type Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { Hono } from 'hono';
 
 import type { HonoEnv } from '../../router';
@@ -15,6 +15,7 @@ import {
   handleEnvelopeItemFileRequest,
   isRoleRestrictedFromCompletedFile,
   resolveFileUploadUserId,
+  shouldRestrictTokenFileAccess,
 } from './files.helpers';
 import {
   ZGetEnvelopeItemFileDownloadRequestParamsSchema,
@@ -278,13 +279,15 @@ export const filesRoute = new Hono<HonoEnv>()
       }
 
       // Controlled signers may view the document while signing, but not the
-      // final signed PDF once the envelope is completed.
-      if (envelopeItem.envelope.status === DocumentStatus.COMPLETED) {
-        const recipient = await getFileTokenRecipient(token, envelopeItem.envelopeId);
+      // final document once the envelope is completed or rejected.
+      const isViewRestricted = await shouldRestrictTokenFileAccess({
+        token,
+        envelopeId: envelopeItem.envelopeId,
+        status: envelopeItem.envelope.status,
+      });
 
-        if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
-          return c.json({ error: 'Controlled signers are not permitted to access the completed document' }, 403);
-        }
+      if (isViewRestricted) {
+        return c.json({ error: 'Controlled signers are not permitted to access the final document' }, 403);
       }
 
       if (!envelopeItem.documentData) {
