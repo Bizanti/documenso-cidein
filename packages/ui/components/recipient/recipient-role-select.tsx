@@ -46,12 +46,11 @@ export const RecipientRoleSelect = forwardRef<HTMLButtonElement, RecipientRoleSe
           </div>
         </SelectItem>
 
-
         <SelectItem value={RecipientRole.CONTROLLED_SIGNER}>
           <div className="flex items-center">
             <div className="flex w-[150px] items-center">
               <span className="mr-2">{ROLE_ICONS[RecipientRole.CONTROLLED_SIGNER]}</span>
-              <Trans>Firmante controlado</Trans>
+              <Trans>Controlled signer</Trans>
             </div>
             <Tooltip>
               <TooltipTrigger>
@@ -60,8 +59,8 @@ export const RecipientRoleSelect = forwardRef<HTMLButtonElement, RecipientRoleSe
               <TooltipContent className="z-9999 max-w-md p-4 text-foreground">
                 <p>
                   <Trans>
-                    Debe firmar el documento, pero no podrá descargarlo ni compartirlo y el PDF final no se adjuntará
-                    al correo de finalización.
+                    The recipient must sign the document, but cannot download or share it, and the final PDF is not
+                    attached to the completion email.
                   </Trans>
                 </p>
               </TooltipContent>

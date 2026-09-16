@@ -5,11 +5,17 @@ import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embeddin
 import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { prisma } from '@documenso/prisma';
 import { sValidator } from '@hono/standard-validator';
-import { RecipientRole, type Prisma } from '@prisma/client';
+import { DocumentStatus, type Prisma } from '@prisma/client';
 import { Hono } from 'hono';
 
 import type { HonoEnv } from '../../router';
-import { checkEnvelopeFileAccess, handleEnvelopeItemFileRequest, resolveFileUploadUserId } from './files.helpers';
+import {
+  checkEnvelopeFileAccess,
+  getFileTokenRecipient,
+  handleEnvelopeItemFileRequest,
+  isRoleRestrictedFromCompletedFile,
+  resolveFileUploadUserId,
+} from './files.helpers';
 import {
   ZGetEnvelopeItemFileDownloadRequestParamsSchema,
   ZGetEnvelopeItemFileRequestParamsSchema,
@@ -271,6 +277,16 @@ export const filesRoute = new Hono<HonoEnv>()
         return c.json({ error: 'Envelope item not found' }, 404);
       }
 
+      // Controlled signers may view the document while signing, but not the
+      // final signed PDF once the envelope is completed.
+      if (envelopeItem.envelope.status === DocumentStatus.COMPLETED) {
+        const recipient = await getFileTokenRecipient(token, envelopeItem.envelopeId);
+
+        if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
+          return c.json({ error: 'Controlled signers are not permitted to access the completed document' }, 403);
+        }
+      }
+
       if (!envelopeItem.documentData) {
         return c.json({ error: 'Document data not found' }, 404);
       }
@@ -323,20 +339,10 @@ export const filesRoute = new Hono<HonoEnv>()
         return c.json({ error: 'Envelope item not found' }, 404);
       }
 
-      if (!token.startsWith('qr_')) {
-        const recipient = await prisma.recipient.findFirst({
-          where: {
-            token,
-            envelopeId: envelopeItem.envelopeId,
-          },
-          select: {
-            role: true,
-          },
-        });
+      const recipient = await getFileTokenRecipient(token, envelopeItem.envelopeId);
 
-        if (recipient?.role === RecipientRole.CONTROLLED_SIGNER) {
-          return c.json({ error: 'Controlled signers are not permitted to download this document' }, 403);
-        }
+      if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
+        return c.json({ error: 'Controlled signers are not permitted to download this document' }, 403);
       }
 
       if (!envelopeItem.documentData) {

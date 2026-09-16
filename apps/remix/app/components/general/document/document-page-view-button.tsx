@@ -1,6 +1,7 @@
 import { useSession } from '@documenso/lib/client-only/providers/session';
 import type { TEnvelope } from '@documenso/lib/types/envelope';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
+import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
 import { Button } from '@documenso/ui/primitives/button';
 import { Trans } from '@lingui/react/macro';
@@ -25,6 +26,7 @@ export const DocumentPageViewButton = ({ envelope }: DocumentPageViewButtonProps
   const isComplete = isDocumentCompleted(envelope);
   const isSigned = recipient?.signingStatus === SigningStatus.SIGNED;
   const role = recipient?.role;
+  const canDownload = role ? getRecipientRoleCapabilities(role).canDownload : true;
 
   const documentsPath = formatDocumentsPath(envelope.team.url);
   const formatPath = `${documentsPath}/${envelope.id}/edit`;
@@ -34,13 +36,14 @@ export const DocumentPageViewButton = ({ envelope }: DocumentPageViewButtonProps
     isPending,
     isComplete,
     isSigned,
+    canDownload,
     internalVersion: envelope.internalVersion,
   })
     .with({ isRecipient: true, isPending: true, isSigned: false }, () => (
       <Button className="w-full" asChild>
         <a href={`/sign/${recipient?.token}`}>
           {match(role)
-            .with(RecipientRole.SIGNER, () => (
+            .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => (
               <>
                 <Pencil className="mr-2 -ml-1 h-4 w-4" />
                 <Trans>Sign</Trans>
@@ -68,6 +71,7 @@ export const DocumentPageViewButton = ({ envelope }: DocumentPageViewButtonProps
         </Link>
       </Button>
     ))
+    .with({ isComplete: true, canDownload: false }, () => null)
     .with({ isComplete: true }, () => (
       <EnvelopeDownloadDialog
         envelopeId={envelope.id}

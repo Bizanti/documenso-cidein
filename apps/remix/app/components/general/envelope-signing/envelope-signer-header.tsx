@@ -61,7 +61,7 @@ export const EnvelopeSignerHeader = () => {
             {match(recipient.role)
               .with(RecipientRole.VIEWER, () => <Trans>Viewer</Trans>)
               .with(RecipientRole.SIGNER, () => <Trans>Signer</Trans>)
-              .with(RecipientRole.CONTROLLED_SIGNER, () => <Trans>Firmante controlado</Trans>)
+              .with(RecipientRole.CONTROLLED_SIGNER, () => <Trans>Controlled signer</Trans>)
               .with(RecipientRole.APPROVER, () => <Trans>Approver</Trans>)
               .with(RecipientRole.ASSISTANT, () => <Trans>Assistant</Trans>)
               .otherwise(() => null)}

@@ -67,8 +67,8 @@ export const TemplateDocumentCompleted = ({
         ) : (
           <Text className="my-4 text-center text-base text-muted-foreground">
             <Trans>
-              El proceso de firma ha finalizado. El documento permanece bajo el control documental del remitente y no se
-              adjunta a este correo.
+              The signing process has finished. The document remains under the sender's document control and is not
+              attached to this email.
             </Trans>
           </Text>
         )}

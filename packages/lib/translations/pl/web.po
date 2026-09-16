@@ -1150,6 +1150,10 @@ msgstr "Zaakceptuj zaproszenie do organizacji w Documenso"
 msgid "Accept team email request for {teamName} on Documenso"
 msgstr "Zaakceptuj adres e-mail zespołu {teamName} w Documenso"
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Acceptance"
+msgstr ""
+
 #: apps/remix/app/components/dialogs/team-inherit-member-disable-dialog.tsx
 msgid "Access disabled"
 msgstr "Dostęp został wyłączony"
@@ -1631,6 +1635,10 @@ msgstr "Wszystkie wstawione podpisy zostaną unieważnione"
 #: apps/remix/app/components/dialogs/envelopes-bulk-move-dialog.tsx
 msgid "All items must be of the same type."
 msgstr "Wszystkie elementy muszą być tego samego rodzaju."
+
+#: apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx
+msgid "All recipients have signed. The document is being processed and will remain under the sender's document control."
+msgstr ""
 
 #: apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx
 msgid "All recipients have signed. The document is being processed and you will receive an email copy shortly."
@@ -2334,6 +2342,10 @@ msgstr "Oczekiwanie na potwierdzenie adresu"
 msgid "Back"
 msgstr "Wstecz"
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Back to home"
+msgstr ""
+
 #: apps/remix/app/components/forms/branding-preferences-form.tsx
 msgid "Background"
 msgstr "Tło"
@@ -2538,6 +2550,10 @@ msgstr "Akceptując prośbę, przyznasz zespołowi {0} następujące uprawnienia
 #: packages/email/templates/confirm-team-email.tsx
 msgid "By accepting this request, you will be granting <0>{teamName}</0> access to:"
 msgstr "Akceptując prośbę, umożliwisz zespołowi <0>{teamName}</0>:"
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "By continuing, you confirm that you have been able to access the document presented to you, that you understand the use of electronic means for this transaction, and that you will only perform the actions assigned to you."
+msgstr ""
 
 #: apps/remix/app/components/dialogs/envelope-delete-dialog.tsx
 msgid "By deleting this document, the following will occur:"
@@ -3144,6 +3160,10 @@ msgstr "Potwierdź adres e-mail"
 msgid "Confirmation email sent"
 msgstr "Wiadomość potwierdzająca została wysłana"
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Contact"
+msgstr ""
+
 #: apps/remix/app/components/general/settings-upsell/email-domains-upsell.tsx
 #: apps/remix/app/components/general/settings-upsell/sso-portal-upsell.tsx
 msgid "Contact Sales"
@@ -3216,6 +3236,21 @@ msgstr "Przejdź do logowania"
 #: apps/remix/app/components/general/settings-upsell/sso-portal-upsell.tsx
 msgid "Continue with SSO"
 msgstr "Logowanie SSO"
+
+#: apps/remix/app/components/general/envelope-signing/envelope-signer-header.tsx
+#: packages/ui/components/recipient/recipient-role-select.tsx
+msgid "Controlled signer"
+msgstr ""
+
+#: packages/lib/constants/recipient-roles.ts
+msgctxt "Recipient role name"
+msgid "Controlled signer"
+msgstr ""
+
+#: packages/lib/constants/recipient-roles.ts
+msgctxt "Recipient role plural name"
+msgid "Controlled signers"
+msgstr ""
 
 #: apps/remix/app/components/forms/reminder-preferences-form.tsx
 msgid "Controls how long recipients have to complete signing before the document expires. After expiration, recipients can no longer sign the document."
@@ -3738,10 +3773,6 @@ msgstr "Ustawienia daty"
 #: apps/remix/app/components/dialogs/ai-field-detection-dialog.tsx
 msgid "David is the Employee, Lucas is the Manager"
 msgstr "David jest pracownikiem. Lucas jest managerem."
-
-#: packages/ui/components/recipient/recipient-role-select.tsx
-msgid "Debe firmar el documento, pero no podrá descargarlo ni compartirlo y el PDF final no se adjuntará al correo de finalización."
-msgstr ""
 
 #: apps/remix/app/components/general/organisations/organisation-invitations.tsx
 #: apps/remix/app/routes/_unauthenticated+/organisation.invite.$token.tsx
@@ -4312,6 +4343,10 @@ msgstr "Dokument i odbiorcy"
 #: packages/ui/primitives/template-flow/add-template-settings.tsx
 msgid "Document access"
 msgstr "Dostęp do dokumentu"
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Document access and document control"
+msgstr ""
 
 #: packages/lib/utils/document-audit-logs.ts
 msgctxt "Audit log format"
@@ -5022,12 +5057,16 @@ msgstr "np. Dział prawny"
 msgid "eg. Mac"
 msgstr "np. Mac"
 
-#: apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx
-msgid "El documento ha finalizado y permanecerá bajo el control documental del remitente."
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Electronic notifications"
 msgstr ""
 
-#: packages/email/template-components/template-document-completed.tsx
-msgid "El proceso de firma ha finalizado. El documento permanece bajo el control documental del remitente y no se adjunta a este correo."
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Electronic Signature and Document Access Disclosure"
+msgstr ""
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Electronic signature and evidence"
 msgstr ""
 
 #: apps/remix/app/components/dialogs/admin-user-create-dialog.tsx
@@ -5982,21 +6021,6 @@ msgstr "Uzupełnił szczegóły, aby utworzyć nową subskrypcję."
 msgid "Filter by status"
 msgstr "Filtruj według statusu"
 
-#: apps/remix/app/components/general/envelope-signing/envelope-signer-header.tsx
-#: packages/ui/components/recipient/recipient-role-select.tsx
-msgid "Firmante controlado"
-msgstr ""
-
-#: packages/lib/constants/recipient-roles.ts
-msgctxt "Recipient role name"
-msgid "Firmante controlado"
-msgstr ""
-
-#: packages/lib/constants/recipient-roles.ts
-msgctxt "Recipient role plural name"
-msgid "Firmantes controlados"
-msgstr ""
-
 #: apps/remix/app/components/forms/branding-preferences-form.tsx
 msgid "Focus ring colour."
 msgstr "Kolor obramowania zaznaczenia."
@@ -6490,6 +6514,10 @@ msgstr "Identyfikowanie pól formularzy"
 msgid "Identifying recipients"
 msgstr "Identyfikowanie odbiorców"
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Identity and personal use"
+msgstr ""
+
 #: apps/remix/app/components/general/organisations/organisation-billing-banner.tsx
 #: apps/remix/app/components/general/organisations/organisation-billing-banner.tsx
 msgid "If there is any issue with your subscription, please contact us at <0>{SUPPORT_EMAIL}</0>."
@@ -6515,6 +6543,10 @@ msgstr "Jeśli prośba wysłania kodu weryfikacyjnego nie została utworzona prz
 msgid "If you do not want to use the authenticator prompted, you can close it, which will then display the next available authenticator."
 msgstr "Jeśli nie chcesz skorzystać z proponowanego uwierzytelniacza, możesz je zamknąć, a następnie wyświetlić inne dostępne metody."
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "If you do not wish to continue with electronic signing, contact the sender before completing your signature. The availability of an alternative procedure will depend on the sender and the requirements applicable to the document."
+msgstr ""
+
 #: apps/remix/app/routes/_unauthenticated+/unverified-account.tsx
 msgid "If you don't find the confirmation link in your inbox, you can request a new one below."
 msgstr "Jeśli nie znajdziesz wiadomości z linkiem potwierdzającym, możesz poprosić o nową wiadomość poniżej."
@@ -6522,6 +6554,10 @@ msgstr "Jeśli nie znajdziesz wiadomości z linkiem potwierdzającym, możesz po
 #: packages/email/templates/organisation-limit-alert.tsx
 msgid "If you expect to need higher limits, please contact support at {SUPPORT_EMAIL} and we will review your account."
 msgstr "Jeśli potrzebujesz wyższych limitów, skontaktuj się z pomocą techniczną pod adresem {SUPPORT_EMAIL}."
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "If you have questions about this process or need to request access to a document, contact the sender. For technical assistance you can also write to <0>{SUPPORT_EMAIL}</0>."
+msgstr ""
 
 #: apps/remix/app/components/forms/2fa/enable-authenticator-app-dialog.tsx
 msgid "If your authenticator app does not support QR codes, you can use the following code instead:"
@@ -8902,6 +8938,10 @@ msgstr "Szablon publiczny"
 msgid "Public templates are connected to your public profile. Any modifications to public templates will also appear in your public profile."
 msgstr "Szablony publiczne są powiązane z Twoim profilem publicznym. Wszelkie zmiany szablonów publicznych pojawią się również w Twoim profilu publicznym."
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Purpose"
+msgstr ""
+
 #: apps/remix/app/components/general/settings-upsell/branding-upsell.tsx
 msgid "Put your own brand on every document you send. Branding is available on the Teams plan and above."
 msgstr "Umieść swoje logo na każdym wysyłanym dokumencie. Branding jest dostępny w planie Teams i wyższym."
@@ -9164,6 +9204,10 @@ msgstr "Odbiorcy"
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-invalid-direct-template-alert.tsx
 msgid "Recipients cannot use this direct link template because the following signers are missing a signature field"
 msgstr "Odbiorcy nie mogą używać tego szablonu bezpośredniego linku, ponieważ brakuje w nim pola podpisu dla następujących podpisujących"
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Recipients designated as <0>Controlled signer</0> can review the document during the process and sign it, but they do not have functions to download or share the document through this flow, and the final PDF is not attached to their completion email. The finished document remains under the custody and document control of the sender. If you need a copy or later access, you must request it from the sender through their authorised procedures."
+msgstr ""
 
 #: apps/remix/app/routes/_authenticated+/admin+/stats.tsx
 msgid "Recipients metrics"
@@ -9613,6 +9657,10 @@ msgstr "Ogranicz logowanie do wybranych domen i przypisz domyślną rolę"
 #: apps/remix/app/components/general/organisations/organisation-billing-banner.tsx
 msgid "Restricted Access"
 msgstr "Dostęp ograniczony"
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Retention and integrity"
+msgstr ""
 
 #: apps/remix/app/components/tables/admin-document-jobs-table.tsx
 msgid "Retried"
@@ -11446,6 +11494,14 @@ msgstr "Dziękujemy za zgłoszenie nadawcy. Zweryfikujemy go. Jeśli masz pytani
 msgid "That's okay, it happens! Click the button below to reset your password."
 msgstr "Zdarza się nawet najlepszym! Kliknij przycisk poniżej, aby zresetować hasło."
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "The ability to download, print, share or receive a copy of the final document depends on the access policy defined by the sender and by their document control system."
+msgstr ""
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "The access and authentication credentials assigned to each recipient are personal. You must not share passwords, codes, authenticated access links or any other factors used to confirm your identity."
+msgstr ""
+
 #: apps/remix/app/components/dialogs/admin-user-delete-dialog.tsx
 msgid "The account has been deleted successfully."
 msgstr "Konto zostało pomyślnie usunięte."
@@ -11524,6 +11580,10 @@ msgstr "Nie można było utworzyć dokumentu z powodu brakujących lub nieprawid
 #: apps/remix/app/utils/toast-error-messages.ts
 msgid "The document could not be sent because some signers do not have a signature field. Please edit the template and add a signature field for each signer."
 msgstr "Nie można wysłać dokumentu, ponieważ niektórzy podpisujący nie mają pola podpisu. Edytuj szablon i dodaj pola podpisu dla wszystkich podpisujących."
+
+#: apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx
+msgid "The document has been completed and will remain under the sender's document control."
+msgstr ""
 
 #: apps/remix/app/components/dialogs/admin-document-delete-dialog.tsx
 msgid "The Document has been deleted successfully."
@@ -11785,6 +11845,14 @@ msgstr "Odbiorca musi podpisać dokument."
 msgid "The recipient is required to view the document for it to be completed."
 msgstr "Odbiorca musi wyświetlić dokument."
 
+#: packages/ui/components/recipient/recipient-role-select.tsx
+msgid "The recipient must sign the document, but cannot download or share it, and the final PDF is not attached to the completion email."
+msgstr ""
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "The sender is responsible for defining the retention periods, access controls and custody procedures applicable to their documents. Download restrictions do not replace the security, traceability, backup and retention controls of the corresponding document management system."
+msgstr ""
+
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains.$id.tsx
 msgid "The SES identity has been deleted and recreated with the same keys. DNS records remain unchanged."
 msgstr "Tożsamość SES została usunięta i ponownie utworzona przy użyciu tych samych kluczy. Rekordy DNS pozostają bez zmian."
@@ -11816,6 +11884,10 @@ msgstr "Czas na podpisanie dokumentu minął. Skontaktuj się z właścicielem d
 msgid "The signing link has been copied to your clipboard."
 msgstr "Link do podpisywania został skopiowany do schowka."
 
+#: packages/email/template-components/template-document-completed.tsx
+msgid "The signing process has finished. The document remains under the sender's document control and is not attached to this email."
+msgstr ""
+
 #: apps/remix/app/components/general/document-signing/csc-recipient-signing-in-progress-page.tsx
 msgid "The signing provider did not respond in time. Please retry."
 msgstr "Dostawca podpisu nie odpowiedział na czas. Spróbuj ponownie."
@@ -11831,6 +11903,14 @@ msgstr "Czas na podpisanie dokumentu „{documentName}” przez użytkownika „
 #: apps/remix/app/components/general/admin-site-banner-section.tsx
 msgid "The site banner is a message that is shown at the top of the site. It can be used to display important information to your users."
 msgstr "Baner strony internetowej to zawartość wyświetlana na górze strony. Może być używana do wyświetlania ważnych informacji użytkownikom."
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "The system may send invitations, reminders and completion notices by email. Receiving a completion notice does not necessarily imply authorisation to download, share or receive the final document as an attachment."
+msgstr ""
+
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "The system records information associated with the signing process, including the recipient, the actions performed and the available timestamps. These records form part of the electronic evidence of the process. The legal effects of an electronic signature depend on the applicable legislation, the type of document and the specific conditions of the transaction."
+msgstr ""
 
 #: packages/email/templates/team-email-removed.tsx
 msgid "The team email <0>{teamEmail}</0> has been removed from the following team"
@@ -12238,6 +12318,10 @@ msgstr "Ten klucz dostępu nie jest skonfigurowany. Zaloguj się i dodaj go w us
 msgid "This recipient can no longer be modified as they have signed a field, or completed the document."
 msgstr "Nie możesz edytować odbiorcy, ponieważ podpisał pole lub zakończył dokument."
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "This service allows you to review and sign documents by electronic means. By continuing with the signing process, you agree to use electronic means to perform the actions assigned to you by the sender."
+msgstr ""
+
 #: apps/remix/app/components/forms/signin.tsx
 msgid "This session has expired. Please try again."
 msgstr "Sesja wygasła. Spróbuj ponownie."
@@ -12502,10 +12586,6 @@ msgstr "Aby wyświetlić pole, musisz być zalogowany jako <0>{0}</0>"
 msgid "To view this field, you need to be logged in."
 msgstr "Aby wyświetlić pole, musisz być zalogowany."
 
-#: apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx
-msgid "Todos los destinatarios han firmado. El documento se está procesando y permanecerá bajo el control documental del remitente."
-msgstr ""
-
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/settings.public-profile.tsx
 msgid "Toggle the switch to hide your profile from the public."
 msgstr "Przełącz, aby ukryć profil."
@@ -12615,10 +12695,6 @@ msgstr "Spróbuj innego zapytania lub zmień kategorię."
 #: apps/remix/app/components/general/document-signing/csc-recipient-blocked-page.tsx
 msgid "Try again"
 msgstr "Spróbuj ponownie"
-
-#: apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx
-msgid "Tu firma ha finalizado. Recibirás una notificación cuando el documento esté completo."
-msgstr ""
 
 #: apps/remix/app/components/dialogs/ai-features-enable-dialog.tsx
 msgid "Turn on AI detection to automatically find recipients and fields in your documents. AI providers do not retain your data for training."
@@ -14068,6 +14144,10 @@ msgstr "Szerokość:"
 msgid "Window"
 msgstr "Przedział czasowy"
 
+#: apps/remix/app/routes/_unauthenticated+/articles.signature-disclosure.tsx
+msgid "Withdrawing consent before signing"
+msgstr ""
+
 #: apps/remix/app/components/general/organisation-usage-panel.tsx
 msgid "Within limit"
 msgstr "W ramach limitu"
@@ -15213,6 +15293,10 @@ msgstr "Ustawienia przypomnień zostały zaktualizowane"
 #: packages/lib/utils/document-audit-logs.ts
 msgid "Your remote signature was applied"
 msgstr "Złożyłeś podpis zdalny"
+
+#: apps/remix/app/routes/_recipient+/sign.$token+/complete.tsx
+msgid "Your signature is complete. You will receive a notification once the document is completed."
+msgstr ""
 
 #: apps/remix/app/components/general/document-signing/csc-recipient-signing-in-progress-page.tsx
 msgid "Your signing authorisation expired before the signature could be applied. Please reauthorise to retry."

@@ -229,7 +229,7 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
               .with({ status: 'COMPLETED' }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
                   {isControlledSigner ? (
-                    <Trans>El documento ha finalizado y permanecerá bajo el control documental del remitente.</Trans>
+                    <Trans>The document has been completed and will remain under the sender's document control.</Trans>
                   ) : (
                     <Trans>Everyone has signed! You will receive an email copy of the signed document.</Trans>
                   )}
@@ -238,22 +238,24 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
               .with({ status: 'PROCESSING' }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
                   {isControlledSigner ? (
-          <Trans>
-            Todos los destinatarios han firmado. El documento se está procesando y permanecerá bajo el control
-            documental del remitente.
-          </Trans>
-        ) : (
-          <Trans>
-            All recipients have signed. The document is being processed and you will receive an email copy
-            shortly.
-          </Trans>
-        )}
+                    <Trans>
+                      All recipients have signed. The document is being processed and will remain under the sender's
+                      document control.
+                    </Trans>
+                  ) : (
+                    <Trans>
+                      All recipients have signed. The document is being processed and you will receive an email copy
+                      shortly.
+                    </Trans>
+                  )}
                 </p>
               ))
               .with({ deletedAt: null }, () => (
                 <p className="mt-2.5 max-w-[60ch] text-center font-medium text-muted-foreground/60 text-sm md:text-base">
                   {isControlledSigner ? (
-                    <Trans>Tu firma ha finalizado. Recibirás una notificación cuando el documento esté completo.</Trans>
+                    <Trans>
+                      Your signature is complete. You will receive a notification once the document is completed.
+                    </Trans>
                   ) : (
                     <Trans>You will receive an email copy of the signed document once everyone has signed.</Trans>
                   )}
@@ -269,17 +271,11 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
 
             <div className="mt-8 flex w-full max-w-xs flex-col items-stretch gap-4 md:w-auto md:max-w-none md:flex-row md:items-center">
               {recipientCapabilities.canShare && (
-
                 <DocumentShareButton
-
                   documentId={document.id}
-
                   token={recipient.token}
-
                   className="w-full max-w-none md:flex-1"
-
                 />
-
               )}
 
               {recipientCapabilities.canDownload && isDocumentCompleted(document) && (

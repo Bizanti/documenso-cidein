@@ -5,6 +5,7 @@ import { generatePartialSignedPdf } from '@documenso/lib/server-only/pdf/generat
 import { getTeamById } from '@documenso/lib/server-only/team/get-team';
 import { sha256 } from '@documenso/lib/universal/crypto';
 import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.server';
+import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
 import {
   type DocumentDataType,
@@ -264,6 +265,37 @@ type CheckEnvelopeFileAccessOptions = {
   teamId: number;
   envelopeType: EnvelopeType;
   templateType: TemplateType;
+};
+
+/**
+ * Returns the recipient a recipient file token belongs to.
+ *
+ * QR tokens do not map to a recipient and always return null.
+ */
+export const getFileTokenRecipient = (token: string, envelopeId: string) => {
+  if (token.startsWith('qr_')) {
+    return Promise.resolve(null);
+  }
+
+  return prisma.recipient.findFirst({
+    where: {
+      token,
+      envelopeId,
+    },
+    select: {
+      role: true,
+    },
+  });
+};
+
+/**
+ * Whether a recipient role is restricted from obtaining the completed document.
+ *
+ * Controlled signers can view the document while signing, but must not receive
+ * the final signed PDF once the envelope is completed.
+ */
+export const isRoleRestrictedFromCompletedFile = (role: RecipientRole): boolean => {
+  return !getRecipientRoleCapabilities(role).receivesCompletedPdf;
 };
 
 /**

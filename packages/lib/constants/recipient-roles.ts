@@ -83,11 +83,11 @@ export const RECIPIENT_ROLES_DESCRIPTION = {
       context: `Recipient role progressive verb`,
     }),
     roleName: msg({
-      message: `Firmante controlado`,
+      message: `Controlled signer`,
       context: `Recipient role name`,
     }),
     roleNamePlural: msg({
-      message: `Firmantes controlados`,
+      message: `Controlled signers`,
       context: `Recipient role plural name`,
     }),
   },
