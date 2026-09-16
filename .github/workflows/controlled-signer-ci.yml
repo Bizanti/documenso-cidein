@@ -35,6 +35,35 @@ jobs:
           fi
           echo "RED confirmed: controlled signer behavior is not implemented yet."
 
+      - name: Repair v2.18 completion-page patch anchor
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/scripts/apply-controlled_signer.py')
+          text = path.read_text(encoding='utf-8')
+
+          start_marker = '''replace_after(
+              complete_path,
+              "  if (!isDocumentAccessValid) {",
+              "  const isDirectTemplate = document.source === DocumentSource.TEMPLATE_DIRECT_LINK;",'''
+          start = text.index(start_marker)
+          end_marker = '''replace(
+              complete_path,
+              "              {recipient.role === RecipientRole.SIGNER && <Trans>Document Signed</Trans>}",'''
+          end = text.index(end_marker, start)
+
+          replacement = '''replace(
+              complete_path,
+              "  return (\\n    <>\\n      <RecipientBranding branding={branding} cspNonce={cspNonce} />\\n      <div",
+              "  const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);\\n  const isControlledSigner = recipient.role === RecipientRole.CONTROLLED_SIGNER;\\n\\n  return (\\n    <>\\n      <RecipientBranding branding={branding} cspNonce={cspNonce} />\\n      <div",
+          )
+          '''
+
+          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          PY
+
       - name: Apply controlled signer implementation
         run: python .github/scripts/apply-controlled_signer.py
 
