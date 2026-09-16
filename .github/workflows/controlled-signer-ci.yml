@@ -1,19 +1,63 @@
 name: Controlled Signer CI
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/controlled-signer
+      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  controlled-signer-tests:
+  controlled-signer-tdd:
+    if: github.head_ref == 'feature/controlled-signer'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/controlled-signer
+          fetch-depth: 0
+
       - uses: ./.github/actions/node-install
-      - name: Run recipient role tests
+
+      - name: RED - verify tests fail before implementation
+        shell: bash
+        run: |
+          set +e
+          npm test -w @documenso/lib -- recipients.test.ts
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "Expected controlled signer tests to fail before implementation, but they passed."
+            exit 1
+          fi
+          echo "RED confirmed: controlled signer behavior is not implemented yet."
+
+      - name: Apply controlled signer implementation
+        run: python .github/scripts/apply-controlled_signer.py
+
+      - name: Regenerate Prisma client
+        run: npm run prisma:generate
+
+      - name: GREEN - run recipient role tests
         run: npm test -w @documenso/lib -- recipients.test.ts
+
+      - name: Build application
+        run: npm run build
+
+      - name: Commit implementation to feature branch
+        shell: bash
+        run: |
+          rm -f .github/scripts/apply-controlled_signer.py
+          rm -f .github/workflows/controlled-signer-ci.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No implementation changes to commit."
+            exit 1
+          fi
+          git commit -m "feat: add controlled signer role"
+          git push origin HEAD:feature/controlled-signer
