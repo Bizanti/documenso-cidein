@@ -243,7 +243,7 @@ export const DocumentSigningCompleteDialog = ({
                     <Trans>You are about to complete viewing the following document</Trans>
                   </span>
                 ))
-                .with(RecipientRole.SIGNER, () => (
+                .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => (
                   <span className="inline-flex flex-wrap">
                     <Trans>You are about to complete signing the following document</Trans>
                   </span>
@@ -383,7 +383,7 @@ export const DocumentSigningCompleteDialog = ({
                   <Button type="submit" disabled={!isComplete} loading={form.formState.isSubmitting}>
                     {match(recipient.role)
                       .with(RecipientRole.VIEWER, () => <Trans>Mark as Viewed</Trans>)
-                      .with(RecipientRole.SIGNER, () => <Trans>Sign</Trans>)
+                      .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => <Trans>Sign</Trans>)
                       .with(RecipientRole.APPROVER, () => <Trans>Approve</Trans>)
                       .with(RecipientRole.CC, () => <Trans>Mark as Viewed</Trans>)
                       .with(RecipientRole.ASSISTANT, () => <Trans>Complete</Trans>)

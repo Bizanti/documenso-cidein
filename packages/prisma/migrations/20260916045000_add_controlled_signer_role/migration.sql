@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "RecipientRole" ADD VALUE 'CONTROLLED_SIGNER';

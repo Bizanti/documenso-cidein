@@ -500,6 +500,7 @@ export const AddFieldsFormPartial = ({
       CC: [],
       VIEWER: [],
       SIGNER: [],
+      CONTROLLED_SIGNER: [],
       APPROVER: [],
       ASSISTANT: [],
     };

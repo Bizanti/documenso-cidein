@@ -3,15 +3,30 @@ name: 'Continuous Integration'
 on:
   workflow_call:
   push:
-    branches: ['main']
+    branches: ['main', 'develop']
   pull_request:
-    branches: ['main']
+    branches: ['main', 'develop']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  unit_tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/node-install
+
+      - name: Run unit tests
+        run: npm run test -w @documenso/lib
+
   build_app:
     name: Build App
     runs-on: ubuntu-latest

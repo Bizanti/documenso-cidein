@@ -2,6 +2,7 @@ import { useSession } from '@documenso/lib/client-only/providers/session';
 import type { TEnvelope } from '@documenso/lib/types/envelope';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { getEnvelopeItemPermissions, mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
+import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
 import { trpc as trpcReact } from '@documenso/trpc/react';
 import { DocumentShareButton } from '@documenso/ui/components/document/document-share-button';
@@ -64,6 +65,12 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
   const isCurrentTeamDocument = team && envelope.teamId === team.id;
   const canManageDocument = Boolean(isOwner || isCurrentTeamDocument);
 
+  // Recipients without download/share capabilities (e.g. controlled signers)
+  // must not be offered actions that the backend will reject.
+  const recipientCapabilities = recipient ? getRecipientRoleCapabilities(recipient.role) : null;
+  const canDownloadDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canDownload;
+  const canShareDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canShare;
+
   const { canTitleBeChanged } = getEnvelopeItemPermissions(envelope, []);
 
   const documentsPath = formatDocumentsPath(team.url);
@@ -95,21 +102,23 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
           </DropdownMenuItem>
         )}
 
-        <EnvelopeDownloadDialog
-          envelopeId={envelope.id}
-          envelopeStatus={envelope.status}
-          isLegacy={envelope.internalVersion === 1}
-          token={canManageDocument ? undefined : recipient?.token}
-          envelopeItems={envelope.envelopeItems}
-          trigger={
-            <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-              <div>
-                <Download className="mr-2 h-4 w-4" />
-                <Trans>Download</Trans>
-              </div>
-            </DropdownMenuItem>
-          }
-        />
+        {canDownloadDocument && (
+          <EnvelopeDownloadDialog
+            envelopeId={envelope.id}
+            envelopeStatus={envelope.status}
+            isLegacy={envelope.internalVersion === 1}
+            token={canManageDocument ? undefined : recipient?.token}
+            envelopeItems={envelope.envelopeItems}
+            trigger={
+              <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                <div>
+                  <Download className="mr-2 h-4 w-4" />
+                  <Trans>Download</Trans>
+                </div>
+              </DropdownMenuItem>
+            }
+          />
+        )}
 
         <DropdownMenuItem asChild>
           <Link to={`${documentsPath}/${envelope.id}/logs`}>
@@ -186,18 +195,20 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
           />
         )}
 
-        <DocumentShareButton
-          documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
-          token={isOwner ? undefined : recipient?.token}
-          trigger={({ loading, disabled }) => (
-            <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
-              <div className="flex items-center">
-                {loading ? <Loader className="mr-2 h-4 w-4" /> : <Share className="mr-2 h-4 w-4" />}
-                <Trans>Share Signing Card</Trans>
-              </div>
-            </DropdownMenuItem>
-          )}
-        />
+        {canShareDocument && (
+          <DocumentShareButton
+            documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
+            token={canManageDocument ? undefined : recipient?.token}
+            trigger={({ loading, disabled }) => (
+              <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
+                <div className="flex items-center">
+                  {loading ? <Loader className="mr-2 h-4 w-4" /> : <Share className="mr-2 h-4 w-4" />}
+                  <Trans>Share Signing Card</Trans>
+                </div>
+              </DropdownMenuItem>
+            )}
+          />
+        )}
       </DropdownMenuContent>
 
       <EnvelopeSaveAsTemplateDialog

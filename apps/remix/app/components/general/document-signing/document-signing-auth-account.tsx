@@ -57,7 +57,10 @@ export const DocumentSigningAuthAccount = ({
         <AlertDescription>
           <span>
             {match({ role: recipient.role, actionTarget })
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'FIELD' }, () =>
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'FIELD' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'FIELD' },
+                () =>
                 isDirectTemplate ? (
                   <Trans>To sign this field, you need to be logged in.</Trans>
                 ) : (
@@ -66,7 +69,10 @@ export const DocumentSigningAuthAccount = ({
                   </Trans>
                 ),
               )
-              .with({ role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' }, () =>
+              .with(
+                { role: RecipientRole.SIGNER, actionTarget: 'DOCUMENT' },
+                { role: RecipientRole.CONTROLLED_SIGNER, actionTarget: 'DOCUMENT' },
+                () =>
                 isDirectTemplate ? (
                   <Trans>To sign this document, you need to be logged in.</Trans>
                 ) : (

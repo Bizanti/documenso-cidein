@@ -44,7 +44,7 @@ export const TemplateDocumentReminder = ({
 
         <Text className="my-1 text-center text-base text-muted-foreground">
           {match(role)
-            .with(RecipientRole.SIGNER, () => <Trans>Continue by signing the document.</Trans>)
+            .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => <Trans>Continue by signing the document.</Trans>)
             .with(RecipientRole.VIEWER, () => <Trans>Continue by viewing the document.</Trans>)
             .with(RecipientRole.APPROVER, () => <Trans>Continue by approving the document.</Trans>)
             .with(RecipientRole.CC, () => '')
@@ -58,7 +58,7 @@ export const TemplateDocumentReminder = ({
             href={signDocumentLink}
           >
             {match(role)
-              .with(RecipientRole.SIGNER, () => <Trans>Sign Document</Trans>)
+              .with(RecipientRole.SIGNER, RecipientRole.CONTROLLED_SIGNER, () => <Trans>Sign Document</Trans>)
               .with(RecipientRole.VIEWER, () => <Trans>View Document</Trans>)
               .with(RecipientRole.APPROVER, () => <Trans>Approve Document</Trans>)
               .with(RecipientRole.CC, () => '')

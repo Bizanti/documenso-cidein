@@ -8,138 +8,110 @@ export default function SignatureDisclosure() {
     <div>
       <article className="prose dark:prose-invert">
         <h1>
-          <Trans>Electronic Signature Disclosure</Trans>
+          <Trans>Electronic Signature and Document Access Disclosure</Trans>
         </h1>
 
         <h2>
-          <Trans>Welcome</Trans>
+          <Trans>Purpose</Trans>
         </h2>
         <p>
           <Trans>
-            Thank you for using Documenso to perform your electronic document signing. The purpose of this disclosure is
-            to inform you about the process, legality, and your rights regarding the use of electronic signatures on our
-            platform. By opting to use an electronic signature, you are agreeing to the terms and conditions outlined
-            below.
+            This service allows you to review and sign documents by electronic means. By continuing with the signing
+            process, you agree to use electronic means to perform the actions assigned to you by the sender.
           </Trans>
         </p>
 
         <h2>
-          <Trans>Acceptance and Consent</Trans>
+          <Trans>Electronic signature and evidence</Trans>
         </h2>
         <p>
           <Trans>
-            When you use our platform to affix your electronic signature to documents, you are consenting to do so under
-            the Electronic Signatures in Global and National Commerce Act (E-Sign Act) and other applicable laws. This
-            action indicates your agreement to use electronic means to sign documents and receive notifications.
+            The system records information associated with the signing process, including the recipient, the actions
+            performed and the available timestamps. These records form part of the electronic evidence of the process.
+            The legal effects of an electronic signature depend on the applicable legislation, the type of document and
+            the specific conditions of the transaction.
           </Trans>
         </p>
 
         <h2>
-          <Trans>Legality of Electronic Signatures</Trans>
+          <Trans>Identity and personal use</Trans>
         </h2>
         <p>
           <Trans>
-            An electronic signature provided by you on our platform, achieved through clicking through to a document and
-            entering your name, or any other electronic signing method we provide, is legally binding. It carries the
-            same weight and enforceability as a manual signature written with ink on paper.
+            The access and authentication credentials assigned to each recipient are personal. You must not share
+            passwords, codes, authenticated access links or any other factors used to confirm your identity.
           </Trans>
         </p>
 
         <h2>
-          <Trans>System Requirements</Trans>
-        </h2>
-        <p>
-          <Trans>To use our electronic signature service, you must have access to:</Trans>
-        </p>
-        <ul>
-          <li>
-            <Trans>A stable internet connection</Trans>
-          </li>
-          <li>
-            <Trans>An email account</Trans>
-          </li>
-          <li>
-            <Trans>A device capable of accessing, opening, and reading documents</Trans>
-          </li>
-          <li>
-            <Trans>A means to print or download documents for your records</Trans>
-          </li>
-        </ul>
-
-        <h2>
-          <Trans>Electronic Delivery of Documents</Trans>
+          <Trans>Document access and document control</Trans>
         </h2>
         <p>
           <Trans>
-            All documents related to the electronic signing process will be provided to you electronically through our
-            platform or via email. It is your responsibility to ensure that your email address is current and that you
-            can receive and open our emails.
+            The ability to download, print, share or receive a copy of the final document depends on the access policy
+            defined by the sender and by their document control system.
+          </Trans>
+        </p>
+        <p>
+          <Trans>
+            Recipients designated as <strong>Controlled signer</strong> can review the document during the process and
+            sign it, but they do not have functions to download or share the document through this flow, and the final
+            PDF is not attached to their completion email. The finished document remains under the custody and document
+            control of the sender. If you need a copy or later access, you must request it from the sender through their
+            authorised procedures.
           </Trans>
         </p>
 
         <h2>
-          <Trans>Consent to Electronic Transactions</Trans>
+          <Trans>Electronic notifications</Trans>
         </h2>
         <p>
           <Trans>
-            By using the electronic signature feature, you are consenting to conduct transactions and receive
-            disclosures electronically. You acknowledge that your electronic signature on documents is binding and that
-            you accept the terms outlined in the documents you are signing.
+            The system may send invitations, reminders and completion notices by email. Receiving a completion notice
+            does not necessarily imply authorisation to download, share or receive the final document as an attachment.
           </Trans>
         </p>
 
         <h2>
-          <Trans>Withdrawing Consent</Trans>
+          <Trans>Withdrawing consent before signing</Trans>
         </h2>
         <p>
           <Trans>
-            You have the right to withdraw your consent to use electronic signatures at any time before completing the
-            signing process. To withdraw your consent, please contact the sender of the document. In failing to contact
-            the sender you may reach out to <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for assistance. Be
-            aware that withdrawing consent may delay or halt the completion of the related transaction or service.
+            If you do not wish to continue with electronic signing, contact the sender before completing your signature.
+            The availability of an alternative procedure will depend on the sender and the requirements applicable to
+            the document.
           </Trans>
         </p>
 
         <h2>
-          <Trans>Updating Your Information</Trans>
+          <Trans>Retention and integrity</Trans>
         </h2>
         <p>
           <Trans>
-            It is crucial to keep your contact information, especially your email address, up to date with us. Please
-            notify us immediately of any changes to ensure that you continue to receive all necessary communications.
+            The sender is responsible for defining the retention periods, access controls and custody procedures
+            applicable to their documents. Download restrictions do not replace the security, traceability, backup and
+            retention controls of the corresponding document management system.
           </Trans>
         </p>
 
         <h2>
-          <Trans>Retention of Documents</Trans>
+          <Trans>Acceptance</Trans>
         </h2>
         <p>
           <Trans>
-            After signing a document electronically, you will be provided the opportunity to view, download, and print
-            the document for your records. It is highly recommended that you retain a copy of all electronically signed
-            documents for your personal records. We will also retain a copy of the signed document for our records
-            however we may not be able to provide you with a copy of the signed document after a certain period of time.
+            By continuing, you confirm that you have been able to access the document presented to you, that you
+            understand the use of electronic means for this transaction, and that you will only perform the actions
+            assigned to you.
           </Trans>
         </p>
 
         <h2>
-          <Trans>Acknowledgment</Trans>
+          <Trans>Contact</Trans>
         </h2>
         <p>
           <Trans>
-            By proceeding to use the electronic signature service provided by Documenso, you affirm that you have read
-            and understood this disclosure. You agree to all terms and conditions related to the use of electronic
-            signatures and electronic transactions as outlined herein.
-          </Trans>
-        </p>
-
-        <h2>
-          <Trans>Contact Information</Trans>
-        </h2>
-        <p>
-          <Trans>
-            For any questions regarding this disclosure, electronic signatures, or any related process, please contact
-            us at: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
+            If you have questions about this process or need to request access to a document, contact the sender. For
+            technical assistance you can also write to <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
           </Trans>
         </p>
       </article>
@@ -147,7 +119,7 @@ export default function SignatureDisclosure() {
       <div className="mt-8">
         <Button asChild>
           <Link to="/">
-            <Trans>Back home</Trans>
+            <Trans>Back to home</Trans>
           </Link>
         </Button>
       </div>
