@@ -25,12 +25,11 @@ import {
 import { useToast } from '../../primitives/use-toast';
 
 export type DocumentShareButtonProps = HTMLAttributes<HTMLButtonElement> & {
-  token?: string;
   documentId: number;
   trigger?: (_props: { loading: boolean; disabled: boolean }) => React.ReactNode;
 };
 
-export const DocumentShareButton = ({ token, documentId, className, trigger }: DocumentShareButtonProps) => {
+export const DocumentShareButton = ({ documentId, className, trigger }: DocumentShareButtonProps) => {
   const { _ } = useLingui();
   const { toast } = useToast();
 
@@ -64,7 +63,6 @@ export const DocumentShareButton = ({ token, documentId, className, trigger }: D
   const onOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
       void createOrGetShareLink({
-        token,
         documentId,
       });
     }
@@ -77,7 +75,6 @@ export const DocumentShareButton = ({ token, documentId, className, trigger }: D
       await copyShareLink(`${NEXT_PUBLIC_WEBAPP_URL()}/share/${shareLink.slug}`);
     } else {
       await createAndCopyShareLink({
-        token,
         documentId,
       });
     }
@@ -90,7 +87,6 @@ export const DocumentShareButton = ({ token, documentId, className, trigger }: D
 
     if (!slug) {
       const result = await createOrGetShareLink({
-        token,
         documentId,
       });
 
@@ -105,7 +101,7 @@ export const DocumentShareButton = ({ token, documentId, className, trigger }: D
 
     window.open(
       generateTwitterIntent(
-        `I just ${token ? 'signed' : 'sent'} a document in style with @documenso. Check it out!`,
+        'I just sent a document in style with @documenso. Check it out!',
         `${NEXT_PUBLIC_WEBAPP_URL()}/share/${slug}`,
       ),
       '_blank',
@@ -123,7 +119,7 @@ export const DocumentShareButton = ({ token, documentId, className, trigger }: D
         }) || (
           <Button
             variant="outline"
-            disabled={!token || !documentId}
+            disabled={!documentId}
             className={cn('h-11 w-full max-w-lg flex-1', className)}
             loading={isLoading}
           >
@@ -149,8 +145,8 @@ export const DocumentShareButton = ({ token, documentId, className, trigger }: D
 
         <div className="flex w-full flex-col">
           <div className="rounded-md border p-4">
-            I just {token ? 'signed' : 'sent'} a document in style with{' '}
-            <span className="font-medium text-blue-400">@documenso</span>. Check it out!
+            I just sent a document in style with <span className="font-medium text-blue-400">@documenso</span>. Check it
+            out!
             <span className="mt-2 block" />
             <span
               className={cn('break-all font-medium text-blue-400', {

@@ -61,6 +61,7 @@ export const ZTemplateSchema = TemplateSchema.pick({
     emailSettings: true,
     emailId: true,
     emailReplyTo: true,
+    downloadWindowHours: true,
   }).extend({
     templateId: z.number().nullable(),
   }),

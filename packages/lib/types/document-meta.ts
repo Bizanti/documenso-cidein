@@ -106,6 +106,25 @@ export const ZDocumentMetaUploadSignatureEnabledSchema = z
   .describe('Whether to allow recipients to sign using an uploaded signature.');
 
 /**
+ * Upper bound for the download window, in hours (one year). Mirrors the schema of
+ * the global `site.download-window` setting.
+ */
+export const MAX_DOWNLOAD_WINDOW_HOURS = 8760;
+
+/**
+ * The number of hours after the document is completed during which it can be
+ * downloaded. `null`/`undefined` defers to the global setting.
+ */
+export const ZDownloadWindowHoursSchema = z
+  .number()
+  .int()
+  .min(1)
+  .max(MAX_DOWNLOAD_WINDOW_HOURS)
+  .describe(
+    'The number of hours after the document is completed during which it can be downloaded. When unset the global download window applies.',
+  );
+
+/**
  * Note: Any updates to this will cause public API changes. You will need to update
  * all corresponding areas where this is used (some places that use this needs to pass
  * it through to another function).
@@ -128,6 +147,7 @@ export const ZDocumentMetaCreateSchema = z.object({
   emailSettings: ZDocumentEmailSettingsSchema.nullish(),
   envelopeExpirationPeriod: ZEnvelopeExpirationPeriod.nullish(),
   reminderSettings: ZEnvelopeReminderSettings.nullish(),
+  downloadWindowHours: ZDownloadWindowHoursSchema.nullish(),
 });
 
 export type TDocumentMetaCreate = z.infer<typeof ZDocumentMetaCreateSchema>;

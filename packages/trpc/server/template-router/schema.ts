@@ -14,6 +14,7 @@ import {
   ZDocumentMetaTimezoneSchema,
   ZDocumentMetaTypedSignatureEnabledSchema,
   ZDocumentMetaUploadSignatureEnabledSchema,
+  ZDownloadWindowHoursSchema,
 } from '@documenso/lib/types/document-meta';
 import { ZEnvelopeSchema } from '@documenso/lib/types/envelope';
 import { ZEnvelopeAttachmentTypeSchema } from '@documenso/lib/types/envelope-attachment';
@@ -68,6 +69,7 @@ export const ZTemplateMetaUpsertSchema = z.object({
   drawSignatureEnabled: ZDocumentMetaDrawSignatureEnabledSchema.optional(),
   signingOrder: z.nativeEnum(DocumentSigningOrder).optional(),
   allowDictateNextSigner: z.boolean().optional(),
+  downloadWindowHours: ZDownloadWindowHoursSchema.nullish(),
 });
 
 export const ZCreateDocumentFromDirectTemplateRequestSchema = z.object({

@@ -5,6 +5,7 @@ import { DOCUMENT_SIGNATURE_TYPES } from '@documenso/lib/constants/document';
 import { SUPPORTED_LANGUAGES } from '@documenso/lib/constants/i18n';
 import { DEFAULT_DOCUMENT_TIME_ZONE, TIME_ZONES } from '@documenso/lib/constants/time-zones';
 import type { TDocument } from '@documenso/lib/types/document';
+import { MAX_DOWNLOAD_WINDOW_HOURS } from '@documenso/lib/types/document-meta';
 import type { TRecipientLite } from '@documenso/lib/types/recipient';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { extractTeamSignatureSettings } from '@documenso/lib/utils/teams';
@@ -25,7 +26,15 @@ import {
   DocumentVisibilityTooltip,
 } from '@documenso/ui/components/document/document-visibility-select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@documenso/ui/primitives/accordion';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@documenso/ui/primitives/form/form';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@documenso/ui/primitives/form/form';
 import { MultiSelectCombobox } from '@documenso/ui/primitives/multi-select-combobox';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Trans, useLingui } from '@lingui/react/macro';
@@ -99,6 +108,7 @@ export const AddSettingsFormPartial = ({
         redirectUrl: document.documentMeta?.redirectUrl ?? '',
         language: document.documentMeta?.language ?? 'en',
         signatureTypes: extractTeamSignatureSettings(document.documentMeta),
+        downloadWindowHours: document.documentMeta?.downloadWindowHours ?? null,
       },
     },
   });
@@ -481,6 +491,52 @@ export const AddSettingsFormPartial = ({
                           <FormControl>
                             <Input className="bg-background" {...field} onBlur={handleAutoSave} />
                           </FormControl>
+
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="meta.downloadWindowHours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex flex-row items-center">
+                            <Trans>Download window</Trans>{' '}
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <InfoIcon className="mx-2 h-4 w-4" />
+                              </TooltipTrigger>
+
+                              <TooltipContent className="max-w-xs text-muted-foreground">
+                                <Trans>
+                                  How long the document can be downloaded after it is completed. Only administrators and
+                                  the SGC role can download it afterwards.
+                                </Trans>
+                              </TooltipContent>
+                            </Tooltip>
+                          </FormLabel>
+
+                          <FormControl>
+                            <Input
+                              className="bg-background"
+                              data-testid="document-download-window-hours"
+                              type="number"
+                              min={1}
+                              max={MAX_DOWNLOAD_WINDOW_HOURS}
+                              {...field}
+                              value={field.value ?? ''}
+                              onChange={(event) =>
+                                field.onChange(event.target.value === '' ? null : Number(event.target.value))
+                              }
+                              onBlur={handleAutoSave}
+                            />
+                          </FormControl>
+
+                          <FormDescription>
+                            <Trans>Hours. Leave empty to use the global download window.</Trans>
+                          </FormDescription>
 
                           <FormMessage />
                         </FormItem>
