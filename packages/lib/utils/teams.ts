@@ -7,6 +7,7 @@ import {
   TEAM_DOCUMENT_VISIBILITY_MAP,
   TEAM_MEMBER_ROLE_HIERARCHY,
   TEAM_MEMBER_ROLE_PERMISSIONS_MAP,
+  TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES,
 } from '../constants/teams';
 import type { TEAM_MEMBER_ROLE_MAP } from '../constants/teams-translations';
 
@@ -237,9 +238,25 @@ export const extractDerivedTeamSettings = (
 };
 
 export const isMemberManagerOrAbove = (role: TeamMemberRole) => {
-  return role === TeamMemberRole.ADMIN || role === TeamMemberRole.MANAGER;
+  return role === TeamMemberRole.ADMIN || role === TeamMemberRole.SGC || role === TeamMemberRole.MANAGER;
 };
 
 export const isMemberAdmin = (role: TeamMemberRole) => {
   return role === TeamMemberRole.ADMIN;
+};
+
+export const isMemberSgc = (role: TeamMemberRole) => {
+  return role === TeamMemberRole.SGC;
+};
+
+/**
+ * Determines whether a team role holds the SGC download privileges
+ * (TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES).
+ *
+ * Used by download policies to decide whether a member may download the
+ * original document, receive CCs of signed documents, or download signed
+ * documents after the download window has expired.
+ */
+export const hasSgcDownloadPrivileges = (role: TeamMemberRole) => {
+  return TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES.some((i) => i === role);
 };
