@@ -155,6 +155,17 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
 
           <Button
             variant="ghost"
+            className={cn('justify-start md:w-full', pathname?.startsWith('/admin/email-templates') && 'bg-secondary')}
+            asChild
+          >
+            <Link to="/admin/email-templates">
+              <MailIcon className="mr-2 h-5 w-5" />
+              <Trans>Email Templates</Trans>
+            </Link>
+          </Button>
+
+          <Button
+            variant="ghost"
             className={cn(
               'justify-start md:w-full',
               pathname?.startsWith('/admin/organisation-insights') && 'bg-secondary',
