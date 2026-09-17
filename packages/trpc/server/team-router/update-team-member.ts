@@ -91,6 +91,13 @@ export const updateTeamMemberRoute = authenticatedProcedure
         group.teamRole === TeamMemberRole.MANAGER,
     );
 
+    const teamSgcGroup = team.teamGroups.find(
+      (group) =>
+        group.organisationGroup.type === OrganisationGroupType.INTERNAL_TEAM &&
+        group.teamId === teamId &&
+        group.teamRole === TeamMemberRole.SGC,
+    );
+
     const teamAdminGroup = team.teamGroups.find(
       (group) =>
         group.organisationGroup.type === OrganisationGroupType.INTERNAL_TEAM &&
@@ -98,11 +105,12 @@ export const updateTeamMemberRoute = authenticatedProcedure
         group.teamRole === TeamMemberRole.ADMIN,
     );
 
-    if (!teamMemberGroup || !teamManagerGroup || !teamAdminGroup) {
+    if (!teamMemberGroup || !teamManagerGroup || !teamSgcGroup || !teamAdminGroup) {
       console.error({
         message: 'Team groups not found.',
         teamMemberGroup: Boolean(teamMemberGroup),
         teamManagerGroup: Boolean(teamManagerGroup),
+        teamSgcGroup: Boolean(teamSgcGroup),
         teamAdminGroup: Boolean(teamAdminGroup),
       });
 
@@ -160,6 +168,7 @@ export const updateTeamMemberRoute = authenticatedProcedure
           groupId: match(data.role)
             .with(TeamMemberRole.MEMBER, () => teamMemberGroup.organisationGroupId)
             .with(TeamMemberRole.MANAGER, () => teamManagerGroup.organisationGroupId)
+            .with(TeamMemberRole.SGC, () => teamSgcGroup.organisationGroupId)
             .with(TeamMemberRole.ADMIN, () => teamAdminGroup.organisationGroupId)
             .exhaustive(),
         },
