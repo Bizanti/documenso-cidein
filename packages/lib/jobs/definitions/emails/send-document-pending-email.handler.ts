@@ -6,7 +6,9 @@ import { EnvelopeType } from '@prisma/client';
 import { createElement } from 'react';
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
+import { applyEmailTemplateOverride } from '../../../server-only/email/apply-email-template-override';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { getEmailTemplateOverride } from '../../../server-only/email/get-email-template-override';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { isRecipientEmailValidForSending } from '../../../utils/recipients';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
@@ -70,9 +72,26 @@ export const run = async ({ payload }: { payload: TSendDocumentPendingEmailJobDe
 
   const assetBaseUrl = NEXT_PUBLIC_WEBAPP_URL() || 'http://localhost:3000';
 
+  const i18n = await getI18nInstance(emailLanguage);
+
+  // Admin-defined global template override for the pending email.
+  const templateOverride = await getEmailTemplateOverride('document-pending');
+
+  const appliedTemplate = applyEmailTemplateOverride({
+    subject: i18n._(msg`Waiting for others to complete signing`),
+    body: '',
+    override: templateOverride,
+    variables: {
+      documentName: envelope.title,
+      recipientName: name,
+      recipientEmail: email,
+    },
+  });
+
   const template = createElement(DocumentPendingEmailTemplate, {
     documentName: envelope.title,
     assetBaseUrl,
+    customBody: appliedTemplate.hasBodyOverride ? appliedTemplate.body : undefined,
   });
 
   const [html, text] = await Promise.all([
@@ -84,8 +103,6 @@ export const run = async ({ payload }: { payload: TSendDocumentPendingEmailJobDe
     }),
   ]);
 
-  const i18n = await getI18nInstance(emailLanguage);
-
   await emailTransport.sendMail({
     to: {
       address: email,
@@ -93,7 +110,7 @@ export const run = async ({ payload }: { payload: TSendDocumentPendingEmailJobDe
     },
     from: senderEmail,
     replyTo: replyToEmail,
-    subject: i18n._(msg`Waiting for others to complete signing`),
+    subject: appliedTemplate.subject,
     html,
     text,
   });

@@ -15,8 +15,10 @@ import { createElement } from 'react';
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { RECIPIENT_ROLE_TO_EMAIL_TYPE, RECIPIENT_ROLES_DESCRIPTION } from '../../../constants/recipient-roles';
+import { applyEmailTemplateOverride } from '../../../server-only/email/apply-email-template-override';
 import { buildEnvelopeEmailHeaders } from '../../../server-only/email/build-envelope-email-headers';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { getEmailTemplateOverride } from '../../../server-only/email/get-email-template-override';
 import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limit/assert-organisation-rates-and-limits';
 import { updateRecipientNextReminder } from '../../../server-only/recipient/update-recipient-next-reminder';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../../types/document-audit-logs';
@@ -163,6 +165,29 @@ export const run = async ({ payload, io }: { payload: TSendSigningEmailJobDefini
     'signer.email': email,
     'document.name': envelope.title,
   };
+
+  // Admin-defined global template override. A per-document custom subject or
+  // message always wins over the global override.
+  const templateOverride = await getEmailTemplateOverride('signing-request');
+
+  const appliedTemplate = applyEmailTemplateOverride({
+    subject: emailSubject,
+    body: emailMessage,
+    override: templateOverride,
+    variables: {
+      documentName: envelope.title,
+      recipientName: name,
+      recipientEmail: email,
+      senderName: user.name || '',
+      senderEmail: user.email,
+    },
+  });
+
+  emailSubject = appliedTemplate.subject;
+
+  if (!customEmail?.message && appliedTemplate.hasBodyOverride) {
+    emailMessage = appliedTemplate.body;
+  }
 
   const assetBaseUrl = NEXT_PUBLIC_WEBAPP_URL() || 'http://localhost:3000';
   const signDocumentLink = `${NEXT_PUBLIC_WEBAPP_URL()}/sign/${recipient.token}`;

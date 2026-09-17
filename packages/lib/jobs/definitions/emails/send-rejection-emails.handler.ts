@@ -10,7 +10,9 @@ import { createElement } from 'react';
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { DOCUMENSO_INTERNAL_EMAIL } from '../../../constants/email';
+import { applyEmailTemplateOverride } from '../../../server-only/email/apply-email-template-override';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { getEmailTemplateOverride } from '../../../server-only/email/get-email-template-override';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
@@ -75,17 +77,38 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
 
   const i18n = await getI18nInstance(emailLanguage);
 
+  // Admin-defined global template override for the rejection emails. Applies to
+  // both the rejection confirmation sent to the recipient and the notification
+  // sent to the document owner.
+  const templateOverride = await getEmailTemplateOverride('document-rejected');
+
+  const templateVariables = {
+    documentName: envelope.title,
+    recipientName: recipient.name,
+    recipientEmail: recipient.email,
+    senderName: envelope.user.name || '',
+    senderEmail: envelope.user.email,
+  };
+
   // Send confirmation email to the recipient who rejected.
   // Skipped when the organisation has email sending disabled, since this is sent on its behalf.
   // The owner notification below intentionally uses the internal Documenso email, so it still sends.
   if (!emailsDisabled && isRecipientEmailValidForSending(recipient)) {
     await io.runTask('send-rejection-confirmation-email', async () => {
+      const appliedTemplate = applyEmailTemplateOverride({
+        subject: i18n._(msg`Document "${envelope.title}" - Rejection Confirmed`),
+        body: '',
+        override: templateOverride,
+        variables: templateVariables,
+      });
+
       const recipientTemplate = createElement(DocumentRejectionConfirmedEmail, {
         recipientName: recipient.name,
         documentName: envelope.title,
         documentOwnerName: envelope.user.name || envelope.user.email,
         reason: recipient.rejectionReason || '',
         assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
+        customBody: appliedTemplate.hasBodyOverride ? appliedTemplate.body : undefined,
       });
 
       const [html, text] = await Promise.all([
@@ -104,7 +127,7 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
         },
         from: senderEmail,
         replyTo: replyToEmail,
-        subject: i18n._(msg`Document "${envelope.title}" - Rejection Confirmed`),
+        subject: appliedTemplate.subject,
         html,
         text,
       });
@@ -113,12 +136,20 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
 
   // Send notification email to document owner
   await io.runTask('send-owner-notification-email', async () => {
+    const appliedTemplate = applyEmailTemplateOverride({
+      subject: i18n._(msg`Document "${envelope.title}" - Rejected by ${recipient.name}`),
+      body: '',
+      override: templateOverride,
+      variables: templateVariables,
+    });
+
     const ownerTemplate = createElement(DocumentRejectedEmail, {
       recipientName: recipient.name,
       documentName: envelope.title,
       documentUrl: `${NEXT_PUBLIC_WEBAPP_URL()}${formatDocumentsPath(envelope.team?.url)}/${envelope.id}`,
       rejectionReason: recipient.rejectionReason || '',
       assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
+      customBody: appliedTemplate.hasBodyOverride ? appliedTemplate.body : undefined,
     });
 
     const [html, text] = await Promise.all([
@@ -136,7 +167,7 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
         address: documentOwner.email,
       },
       from: DOCUMENSO_INTERNAL_EMAIL, // Purposefully using internal email here.
-      subject: i18n._(msg`Document "${envelope.title}" - Rejected by ${recipient.name}`),
+      subject: appliedTemplate.subject,
       html,
       text,
     });
