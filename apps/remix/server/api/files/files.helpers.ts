@@ -1,10 +1,6 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
-import {
-  type EnvelopeDownloadPolicy,
-  getEnvelopeDownloadPolicy,
-  isFinalDocumentStatus,
-} from '@documenso/lib/server-only/document/download-policy';
+import { isFinalDocumentStatus } from '@documenso/lib/server-only/document/download-policy';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { generatePartialSignedPdf } from '@documenso/lib/server-only/pdf/generate-partial-signed-pdf';
 import { getTeamById } from '@documenso/lib/server-only/team/get-team';
@@ -308,60 +304,6 @@ export const isRoleRestrictedFromCompletedFile = (role: RecipientRole): boolean 
  * document. See `download-policy.ts` for the download rules built on top.
  */
 export { isFinalDocumentStatus };
-
-type GetSessionDownloadPolicyOptions = {
-  userId: number;
-  teamId: number;
-  status: DocumentStatus;
-  completedAt: Date | null;
-  downloadWindowHours: number | null | undefined;
-};
-
-/**
- * Resolves the download policy for a session (team member) viewer.
- *
- * Members outside the envelope's team - for example someone reaching an
- * organisation template through another team - are treated as non-privileged.
- */
-export const getSessionDownloadPolicy = async ({
-  userId,
-  teamId,
-  status,
-  completedAt,
-  downloadWindowHours,
-}: GetSessionDownloadPolicyOptions): Promise<EnvelopeDownloadPolicy> => {
-  const team = await getTeamById({ userId, teamId }).catch(() => null);
-
-  return await getEnvelopeDownloadPolicy({
-    status,
-    completedAt,
-    downloadWindowHours,
-    role: team?.currentTeamRole ?? null,
-  });
-};
-
-type GetRecipientDownloadPolicyOptions = {
-  status: DocumentStatus;
-  completedAt: Date | null;
-  downloadWindowHours: number | null | undefined;
-};
-
-/**
- * Resolves the download policy for a recipient (file token) viewer, who never
- * holds team privileges.
- */
-export const getRecipientDownloadPolicy = async ({
-  status,
-  completedAt,
-  downloadWindowHours,
-}: GetRecipientDownloadPolicyOptions): Promise<EnvelopeDownloadPolicy> => {
-  return await getEnvelopeDownloadPolicy({
-    status,
-    completedAt,
-    downloadWindowHours,
-    role: null,
-  });
-};
 
 type ShouldRestrictTokenFileAccessOptions = {
   token: string;

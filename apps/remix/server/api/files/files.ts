@@ -4,6 +4,8 @@ import { AppError } from '@documenso/lib/errors/app-error';
 import {
   DOWNLOAD_DENIAL_MESSAGE,
   getEnvelopeItemDownloadDenial,
+  getRecipientDownloadPolicy,
+  getUserDownloadPolicy,
 } from '@documenso/lib/server-only/document/download-policy';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
@@ -16,8 +18,6 @@ import type { HonoEnv } from '../../router';
 import {
   checkEnvelopeFileAccess,
   getFileTokenRecipient,
-  getRecipientDownloadPolicy,
-  getSessionDownloadPolicy,
   handleEnvelopeItemFileRequest,
   isRoleRestrictedFromCompletedFile,
   resolveFileUploadUserId,
@@ -213,7 +213,7 @@ export const filesRoute = new Hono<HonoEnv>()
           );
         }
 
-        const downloadPolicy = await getSessionDownloadPolicy({
+        const downloadPolicy = await getUserDownloadPolicy({
           userId: session.user.id,
           teamId: envelope.teamId,
           status: envelope.status,

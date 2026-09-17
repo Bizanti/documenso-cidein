@@ -2,17 +2,20 @@ import { DocumentStatus, TeamMemberRole } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
+import { getTeamById } from '../team/get-team';
 import {
   buildEnvelopeDownloadPolicy,
   DOWNLOAD_DENIAL_REASON,
   getDownloadWindowExpiresAt,
   getEnvelopeDownloadPolicy,
   getEnvelopeItemDownloadDenial,
+  getUserDownloadPolicy,
   isDownloadWindowExpired,
   isFinalDocumentStatus,
 } from './download-policy';
 
 vi.mock('../site-settings/get-download-window-hours');
+vi.mock('../team/get-team');
 
 const HOUR_IN_MS = 60 * 60 * 1000;
 
@@ -261,6 +264,110 @@ describe('getEnvelopeDownloadPolicy', () => {
     expect(policy.downloadWindowHours).toBeNull();
     expect(policy.isDownloadWindowExpired).toBe(false);
     expect(policy.canDownloadSigned).toBe(true);
+  });
+});
+
+describe('getUserDownloadPolicy', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  const mockTeamRole = (role: TeamMemberRole) => {
+    vi.mocked(getTeamById).mockResolvedValue({
+      currentTeamRole: role,
+    } as unknown as Awaited<ReturnType<typeof getTeamById>>);
+  };
+
+  it('keeps the original and post-window access for ADMIN and SGC', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.SGC);
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(policy).toMatchObject({
+      isDownloadWindowExpired: true,
+      isSgcPrivileged: true,
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+    });
+  });
+
+  it('restricts non privileged team roles', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.MANAGER);
+
+    const expiredPolicy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(expiredPolicy).toMatchObject({
+      isDownloadWindowExpired: true,
+      canDownloadSigned: false,
+      canDownloadOriginal: false,
+    });
+
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(48);
+
+    const activePolicy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(activePolicy).toMatchObject({
+      isDownloadWindowExpired: false,
+      canDownloadSigned: true,
+      canDownloadOriginal: false,
+    });
+  });
+
+  it('treats users outside the envelope team as non privileged', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+    vi.mocked(getTeamById).mockRejectedValue(new Error('Team not found'));
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+    });
+
+    expect(policy).toMatchObject({
+      isSgcPrivileged: false,
+      canDownloadOriginal: false,
+    });
+  });
+
+  it('keeps the working copy available while the document is not final', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.MEMBER);
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+    });
+
+    expect(policy).toMatchObject({
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+    });
   });
 });
 

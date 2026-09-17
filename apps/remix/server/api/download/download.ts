@@ -1,5 +1,10 @@
 import { PDF_SIZE_A4_72PPI } from '@documenso/lib/constants/pdf';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import {
+  DOWNLOAD_DENIAL_MESSAGE,
+  getEnvelopeItemDownloadDenial,
+  getUserDownloadPolicy,
+} from '@documenso/lib/server-only/document/download-policy';
 import { getEnvelopeById, getEnvelopeWhereInput } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { generateAuditLogPdf } from '@documenso/lib/server-only/pdf/generate-audit-log-pdf';
 import { generateCertificatePdf } from '@documenso/lib/server-only/pdf/generate-certificate-pdf';
@@ -91,6 +96,11 @@ export const downloadRoute = new Hono<HonoEnv>()
                     signingStatus: true,
                   },
                 },
+                documentMeta: {
+                  select: {
+                    downloadWindowHours: true,
+                  },
+                },
               },
             },
             documentData: true,
@@ -99,6 +109,26 @@ export const downloadRoute = new Hono<HonoEnv>()
 
         if (!envelopeItem) {
           return c.json({ error: 'Envelope item not found' }, 404);
+        }
+
+        // Download policies apply to API token access as well: past the download
+        // window only ADMIN/SGC keep access, and the original is theirs alone once
+        // a signed copy exists.
+        const downloadPolicy = await getUserDownloadPolicy({
+          userId: apiToken.user.id,
+          teamId: envelopeItem.envelope.teamId,
+          status: envelopeItem.envelope.status,
+          completedAt: envelopeItem.envelope.completedAt,
+          downloadWindowHours: envelopeItem.envelope.documentMeta?.downloadWindowHours,
+        });
+
+        const downloadDenial = getEnvelopeItemDownloadDenial({
+          version,
+          policy: downloadPolicy,
+        });
+
+        if (downloadDenial) {
+          return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
         }
 
         if (!envelopeItem.documentData) {
@@ -358,6 +388,28 @@ export const downloadRoute = new Hono<HonoEnv>()
         return c.json({ error: 'Document item not found' }, 404);
       }
 
+      // Download policies apply to API token access as well: past the download
+      // window only ADMIN/SGC keep access, and the original is theirs alone once
+      // a signed copy exists.
+      const downloadPolicy = await getUserDownloadPolicy({
+        userId: apiToken.user.id,
+        teamId: envelope.teamId,
+        status: envelope.status,
+        completedAt: envelope.completedAt,
+        downloadWindowHours: envelope.documentMeta.downloadWindowHours,
+      });
+
+      const versionToDownload = version || 'signed';
+
+      const downloadDenial = getEnvelopeItemDownloadDenial({
+        version: versionToDownload,
+        policy: downloadPolicy,
+      });
+
+      if (downloadDenial) {
+        return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
+      }
+
       if (!envelopeItem.documentData) {
         return c.json({ error: 'Document data not found' }, 404);
       }
@@ -366,7 +418,7 @@ export const downloadRoute = new Hono<HonoEnv>()
         title: envelopeItem.title,
         status: envelope.status,
         documentData: envelopeItem.documentData,
-        version: version || 'signed',
+        version: versionToDownload,
         isDownload: true,
         context: c,
       });

@@ -3,6 +3,7 @@ import { DocumentStatus } from '@prisma/client';
 
 import { hasSgcDownloadPrivileges } from '../../utils/teams';
 import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
+import { getTeamById } from '../team/get-team';
 
 export type TDocumentDownloadVersion = 'original' | 'signed' | 'pending';
 
@@ -174,6 +175,54 @@ export const getEnvelopeDownloadPolicy = async ({
     completedAt,
     windowHours: await resolveDownloadWindowHours(downloadWindowHours),
     role,
+    now,
+  });
+};
+
+type GetUserDownloadPolicyOptions = {
+  userId: number;
+  teamId: number;
+  status: DocumentStatus;
+  completedAt: Date | null | undefined;
+  downloadWindowHours?: number | null;
+  now?: Date;
+};
+
+/**
+ * Resolves the download policy for a user acting through a team (session or API
+ * token), using their role in the envelope's team.
+ *
+ * Users outside that team - for example someone reaching an organisation template
+ * through another team - are treated as non-privileged.
+ */
+export const getUserDownloadPolicy = async ({
+  userId,
+  teamId,
+  ...options
+}: GetUserDownloadPolicyOptions): Promise<EnvelopeDownloadPolicy> => {
+  const team = await getTeamById({ userId, teamId }).catch(() => null);
+
+  return await getEnvelopeDownloadPolicy({
+    ...options,
+    role: team?.currentTeamRole ?? null,
+  });
+};
+
+/**
+ * Resolves the download policy for a recipient (file token) viewer, who never
+ * holds team privileges.
+ */
+export const getRecipientDownloadPolicy = async ({
+  status,
+  completedAt,
+  downloadWindowHours,
+  now,
+}: Omit<GetUserDownloadPolicyOptions, 'userId' | 'teamId'>): Promise<EnvelopeDownloadPolicy> => {
+  return await getEnvelopeDownloadPolicy({
+    status,
+    completedAt,
+    downloadWindowHours,
+    role: null,
     now,
   });
 };

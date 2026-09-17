@@ -71,7 +71,10 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
 
     const teamRoles = new Map<number, TeamMemberRole>();
 
-    if (userId) {
+    // A recipient token only ever grants recipient access, even when the request
+    // happens to carry a privileged session, so the UI never offers a version the
+    // token download route would reject.
+    if (userId && !token) {
       const teamIds = Array.from(new Set(envelopes.map((envelope) => envelope.teamId)));
 
       await Promise.all(
