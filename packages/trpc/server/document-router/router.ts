@@ -20,8 +20,10 @@ import { findInboxRoute } from './find-inbox';
 import { getDocumentRoute } from './get-document';
 import { getDocumentByTokenRoute } from './get-document-by-token';
 import { getDocumentsByIdsRoute } from './get-documents-by-ids';
+import { getEnvelopeDownloadPoliciesRoute } from './get-envelope-download-policies';
 import { getInboxCountRoute } from './get-inbox-count';
 import { redistributeDocumentRoute } from './redistribute-document';
+import { resendSignedDocumentRoute } from './resend-signed-document';
 import { searchDocumentRoute } from './search-document';
 import { shareDocumentRoute } from './share-document';
 import { updateDocumentRoute } from './update-document';
@@ -37,6 +39,8 @@ export const documentRouter = router({
   downloadCertificate: downloadDocumentCertificateRoute,
   distribute: distributeDocumentRoute,
   redistribute: redistributeDocumentRoute,
+  resendSignedDocument: resendSignedDocumentRoute,
+  getEnvelopeDownloadPolicies: getEnvelopeDownloadPoliciesRoute,
   search: searchDocumentRoute,
   share: shareDocumentRoute,
 

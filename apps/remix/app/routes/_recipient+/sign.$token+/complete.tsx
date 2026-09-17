@@ -12,19 +12,20 @@ import { getUserByEmail } from '@documenso/lib/server-only/user/get-user-by-emai
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { getRecipientRoleCapabilities, isSigningRecipientRole } from '@documenso/lib/utils/recipients';
 import { trpc } from '@documenso/trpc/react';
-import { DocumentShareButton } from '@documenso/ui/components/document/document-share-button';
 import { SigningCard3D } from '@documenso/ui/components/signing-card';
 import { cn } from '@documenso/ui/lib/utils';
 import { Badge } from '@documenso/ui/primitives/badge';
 import { Button } from '@documenso/ui/primitives/button';
+import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
 import { Trans } from '@lingui/react/macro';
 import { DocumentStatus, FieldType, RecipientRole } from '@prisma/client';
-import { CheckCircle2, Clock8, DownloadIcon, Loader2 } from 'lucide-react';
+import { CheckCircle2, Clock8, DownloadIcon, Loader2, LockIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
+import { useEnvelopeDownloadPolicy } from '~/components/dialogs/envelope-download-policy';
 import { ClaimAccount } from '~/components/general/claim-account';
 import { DocumentSigningAuthPageView } from '~/components/general/document-signing/document-signing-auth-page';
 import { RecipientBranding } from '~/components/general/recipient-branding';
@@ -140,6 +141,12 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
   // Use signing status from query if available, otherwise fall back to document status
   const signingStatus = signingStatusData?.status ?? 'PENDING';
 
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({
+    envelopeId: document?.envelopeId ?? '',
+    token: recipient?.token,
+    enabled: isDocumentAccessValid && Boolean(document && isDocumentCompleted(document)),
+  });
+
   if (!isDocumentAccessValid) {
     return (
       <>
@@ -151,6 +158,9 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
 
   const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);
   const isControlledSigner = recipient.role === RecipientRole.CONTROLLED_SIGNER;
+
+  const isDownloadLocked =
+    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
 
   return (
     <>
@@ -270,28 +280,34 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
               ))}
 
             <div className="mt-8 flex w-full max-w-xs flex-col items-stretch gap-4 md:w-auto md:max-w-none md:flex-row md:items-center">
-              {recipientCapabilities.canShare && (
-                <DocumentShareButton
-                  documentId={document.id}
-                  token={recipient.token}
-                  className="w-full max-w-none md:flex-1"
-                />
-              )}
-
-              {recipientCapabilities.canDownload && isDocumentCompleted(document) && (
-                <EnvelopeDownloadDialog
-                  envelopeId={document.envelopeId}
-                  envelopeStatus={document.status}
-                  envelopeItems={document.envelopeItems}
-                  token={recipient?.token}
-                  trigger={
-                    <Button type="button" variant="outline" className="flex-1 md:flex-initial">
-                      <DownloadIcon className="mr-2 h-5 w-5" />
-                      <Trans>Download</Trans>
-                    </Button>
-                  }
-                />
-              )}
+              {recipientCapabilities.canDownload &&
+                isDocumentCompleted(document) &&
+                (isDownloadLocked ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 md:flex-initial"
+                    disabled
+                    title={_(msg`The download window for this document has expired.`)}
+                  >
+                    <LockIcon className="mr-2 h-5 w-5" />
+                    <Trans>Download locked</Trans>
+                  </Button>
+                ) : (
+                  <EnvelopeDownloadDialog
+                    envelopeId={document.envelopeId}
+                    envelopeStatus={document.status}
+                    envelopeItems={document.envelopeItems}
+                    token={recipient?.token}
+                    downloadPolicy={downloadPolicy}
+                    trigger={
+                      <Button type="button" variant="outline" className="flex-1 md:flex-initial">
+                        <DownloadIcon className="mr-2 h-5 w-5" />
+                        <Trans>Download</Trans>
+                      </Button>
+                    }
+                  />
+                ))}
 
               {user && (
                 <Button asChild>
@@ -301,6 +317,12 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
                 </Button>
               )}
             </div>
+
+            {isDownloadLocked && (
+              <p className="mt-4 max-w-[60ch] text-center text-muted-foreground text-sm">
+                <Trans>The download window for this document has expired. Contact the sender to request a copy.</Trans>
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col items-center">

@@ -3,7 +3,6 @@ import { z } from 'zod';
 
 export const ZShareDocumentRequestSchema = z.object({
   documentId: z.number(),
-  token: z.string().optional(),
 });
 
 export const ZShareDocumentResponseSchema = DocumentShareLinkSchema.pick({

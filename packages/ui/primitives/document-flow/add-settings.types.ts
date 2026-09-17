@@ -3,7 +3,11 @@ import { DocumentSignatureType } from '@documenso/lib/constants/document';
 import { SUPPORTED_LANGUAGE_CODES } from '@documenso/lib/constants/i18n';
 import { DEFAULT_DOCUMENT_TIME_ZONE } from '@documenso/lib/constants/time-zones';
 import { ZDocumentAccessAuthTypesSchema, ZDocumentActionAuthTypesSchema } from '@documenso/lib/types/document-auth';
-import { ZDocumentMetaDateFormatSchema, ZDocumentMetaTimezoneSchema } from '@documenso/lib/types/document-meta';
+import {
+  ZDocumentMetaDateFormatSchema,
+  ZDocumentMetaTimezoneSchema,
+  ZDownloadWindowHoursSchema,
+} from '@documenso/lib/types/document-meta';
 import { isValidRedirectUrl } from '@documenso/lib/utils/is-valid-redirect-url';
 import { msg } from '@lingui/core/macro';
 import { DocumentVisibility } from '@prisma/client';
@@ -35,6 +39,12 @@ export const ZAddSettingsFormSchema = z.object({
     signatureTypes: z.array(z.nativeEnum(DocumentSignatureType)).min(1, {
       message: msg`At least one signature type must be enabled`.id,
     }),
+
+    /**
+     * Hours after the document is completed during which it can be downloaded.
+     * Nullish falls back to the global download window setting.
+     */
+    downloadWindowHours: ZDownloadWindowHoursSchema.nullish(),
   }),
 });
 

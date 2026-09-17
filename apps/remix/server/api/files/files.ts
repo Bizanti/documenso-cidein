@@ -1,6 +1,12 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
 import { APP_DOCUMENT_UPLOAD_SIZE_LIMIT } from '@documenso/lib/constants/app';
 import { AppError } from '@documenso/lib/errors/app-error';
+import {
+  DOWNLOAD_DENIAL_MESSAGE,
+  getEnvelopeItemDownloadDenial,
+  getRecipientDownloadPolicy,
+  getUserDownloadPolicy,
+} from '@documenso/lib/server-only/document/download-policy';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { prisma } from '@documenso/prisma';
@@ -173,6 +179,11 @@ export const filesRoute = new Hono<HonoEnv>()
                 signingStatus: true,
               },
             },
+            documentMeta: {
+              select: {
+                downloadWindowHours: true,
+              },
+            },
           },
         });
 
@@ -200,6 +211,23 @@ export const filesRoute = new Hono<HonoEnv>()
             },
             403,
           );
+        }
+
+        const downloadPolicy = await getUserDownloadPolicy({
+          userId: session.user.id,
+          teamId: envelope.teamId,
+          status: envelope.status,
+          completedAt: envelope.completedAt,
+          downloadWindowHours: envelope.documentMeta?.downloadWindowHours,
+        });
+
+        const downloadDenial = getEnvelopeItemDownloadDenial({
+          version,
+          policy: downloadPolicy,
+        });
+
+        if (downloadDenial) {
+          return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
         }
 
         if (!envelopeItem.documentData) {
@@ -333,7 +361,15 @@ export const filesRoute = new Hono<HonoEnv>()
       const envelopeItem = await prisma.envelopeItem.findUnique({
         where: envelopeWhereQuery,
         include: {
-          envelope: true,
+          envelope: {
+            include: {
+              documentMeta: {
+                select: {
+                  downloadWindowHours: true,
+                },
+              },
+            },
+          },
           documentData: true,
         },
       });
@@ -346,6 +382,21 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
         return c.json({ error: 'Controlled signers are not permitted to download this document' }, 403);
+      }
+
+      const downloadPolicy = await getRecipientDownloadPolicy({
+        status: envelopeItem.envelope.status,
+        completedAt: envelopeItem.envelope.completedAt,
+        downloadWindowHours: envelopeItem.envelope.documentMeta?.downloadWindowHours,
+      });
+
+      const downloadDenial = getEnvelopeItemDownloadDenial({
+        version,
+        policy: downloadPolicy,
+      });
+
+      if (downloadDenial) {
+        return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
       }
 
       if (!envelopeItem.documentData) {

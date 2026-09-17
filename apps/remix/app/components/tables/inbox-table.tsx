@@ -15,7 +15,7 @@ import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
 import { Trans } from '@lingui/react/macro';
 import { DocumentStatus as DocumentStatusEnum, RecipientRole, SigningStatus } from '@prisma/client';
-import { CheckCircleIcon, DownloadIcon, EyeIcon, Loader, PencilIcon } from 'lucide-react';
+import { CheckCircleIcon, DownloadIcon, EyeIcon, Loader, LockIcon, PencilIcon } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { useMemo, useTransition } from 'react';
 import { useSearchParams } from 'react-router';
@@ -25,6 +25,7 @@ import { DocumentStatus } from '~/components/general/document/document-status';
 import { useOptionalCurrentTeam } from '~/providers/team';
 
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
+import { useEnvelopeDownloadPolicy } from '../dialogs/envelope-download-policy';
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
 
 export type DocumentsTableProps = {
@@ -185,6 +186,15 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
   const role = recipient?.role;
   const canDownload = role ? getRecipientRoleCapabilities(role).canDownload : true;
 
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({
+    envelopeId: row.envelopeId,
+    token: recipient?.token,
+    enabled: isComplete && canDownload,
+  });
+
+  const isDownloadLocked =
+    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
+
   if (!recipient) {
     return null;
   }
@@ -233,18 +243,26 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
       </Button>
     ))
     .with({ isComplete: true, canDownload: false }, () => null)
-    .with({ isComplete: true }, () => (
-      <EnvelopeDownloadDialog
-        envelopeId={row.envelopeId}
-        envelopeStatus={row.status}
-        token={recipient?.token}
-        trigger={
-          <Button className="w-32">
-            <DownloadIcon className="mr-2 -ml-1 inline h-4 w-4" />
-            <Trans>Download</Trans>
-          </Button>
-        }
-      />
-    ))
+    .with({ isComplete: true }, () =>
+      isDownloadLocked ? (
+        <Button className="w-32" disabled title={_(msg`The download window for this document has expired.`)}>
+          <LockIcon className="mr-2 -ml-1 inline h-4 w-4" />
+          <Trans>Download locked</Trans>
+        </Button>
+      ) : (
+        <EnvelopeDownloadDialog
+          envelopeId={row.envelopeId}
+          envelopeStatus={row.status}
+          token={recipient?.token}
+          downloadPolicy={downloadPolicy}
+          trigger={
+            <Button className="w-32">
+              <DownloadIcon className="mr-2 -ml-1 inline h-4 w-4" />
+              <Trans>Download</Trans>
+            </Button>
+          }
+        />
+      ),
+    )
     .otherwise(() => <div></div>);
 };
