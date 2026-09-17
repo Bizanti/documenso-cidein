@@ -110,9 +110,12 @@ test('[DOWNLOAD POLICY API]: an API token cannot download the original of a comp
     tokenName: 'e2e-download-manager',
   });
 
-  const documentResponse = await request.get(`${WEBAPP_BASE_URL}/api/v2/document/${documentId}/download/original`, {
-    headers: authorizationHeaders(managerToken),
-  });
+  const documentResponse = await request.get(
+    `${WEBAPP_BASE_URL}/api/v2/document/${documentId}/download?version=original`,
+    {
+      headers: authorizationHeaders(managerToken),
+    },
+  );
 
   expect(documentResponse.status()).toBe(403);
   expect(await documentResponse.json()).toMatchObject({ code: 'ORIGINAL_DOWNLOAD_FORBIDDEN' });
@@ -172,9 +175,12 @@ test('[DOWNLOAD POLICY API]: the download window applies to API token downloads'
     tokenName: 'e2e-window-manager',
   });
 
-  const documentResponse = await request.get(`${WEBAPP_BASE_URL}/api/v2/document/${documentId}/download/signed`, {
-    headers: authorizationHeaders(managerToken),
-  });
+  const documentResponse = await request.get(
+    `${WEBAPP_BASE_URL}/api/v2/document/${documentId}/download?version=signed`,
+    {
+      headers: authorizationHeaders(managerToken),
+    },
+  );
 
   expect(documentResponse.status()).toBe(403);
   expect(await documentResponse.json()).toMatchObject({ code: 'DOWNLOAD_WINDOW_EXPIRED' });

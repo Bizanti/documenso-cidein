@@ -1,9 +1,11 @@
 import type { TeamGroup } from '@documenso/prisma/generated/types';
 import { TeamMemberRole } from '@documenso/prisma/generated/types';
+import { DocumentVisibility } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 
 import { TEAM_DOCUMENT_VISIBILITY_MAP, TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES } from '../constants/teams';
 import {
+  canAccessTeamDocument,
   canExecuteTeamAction,
   getHighestTeamRoleInGroup,
   hasSgcDownloadPrivileges,
@@ -70,6 +72,22 @@ describe('team permissions', () => {
     expect(TEAM_DOCUMENT_VISIBILITY_MAP[TeamMemberRole.SGC]).toEqual(
       TEAM_DOCUMENT_VISIBILITY_MAP[TeamMemberRole.ADMIN],
     );
+  });
+
+  it('resolves visibility through canAccessTeamDocument for every role', () => {
+    expect(canAccessTeamDocument(TeamMemberRole.ADMIN, DocumentVisibility.ADMIN)).toBe(true);
+    expect(canAccessTeamDocument(TeamMemberRole.ADMIN, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(true);
+    expect(canAccessTeamDocument(TeamMemberRole.ADMIN, DocumentVisibility.EVERYONE)).toBe(true);
+
+    expect(canAccessTeamDocument(TeamMemberRole.SGC, DocumentVisibility.ADMIN)).toBe(true);
+    expect(canAccessTeamDocument(TeamMemberRole.SGC, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(true);
+    expect(canAccessTeamDocument(TeamMemberRole.SGC, DocumentVisibility.EVERYONE)).toBe(true);
+
+    expect(canAccessTeamDocument(TeamMemberRole.MANAGER, DocumentVisibility.ADMIN)).toBe(false);
+    expect(canAccessTeamDocument(TeamMemberRole.MANAGER, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(true);
+
+    expect(canAccessTeamDocument(TeamMemberRole.MEMBER, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(false);
+    expect(canAccessTeamDocument(TeamMemberRole.MEMBER, DocumentVisibility.EVERYONE)).toBe(true);
   });
 });
 

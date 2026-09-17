@@ -20,6 +20,9 @@ export type TDownloadEnvelopeItemRequestQuery = z.infer<typeof ZDownloadEnvelope
 
 export const ZDownloadDocumentRequestParamsSchema = z.object({
   documentId: z.coerce.number().describe('The ID of the document to download.'),
+});
+
+export const ZDownloadDocumentRequestQuerySchema = z.object({
   version: z
     .enum(['original', 'signed'])
     .optional()
@@ -30,6 +33,8 @@ export const ZDownloadDocumentRequestParamsSchema = z.object({
 });
 
 export type TDownloadDocumentRequestParams = z.infer<typeof ZDownloadDocumentRequestParamsSchema>;
+
+export type TDownloadDocumentRequestQuery = z.infer<typeof ZDownloadDocumentRequestQuerySchema>;
 
 export const ZDownloadEnvelopeAuditLogPdfRequestParamsSchema = z.object({
   envelopeId: z.string().describe('The ID of the envelope to download the audit log for.'),
