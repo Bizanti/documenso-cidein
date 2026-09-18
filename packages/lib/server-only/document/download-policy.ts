@@ -1,6 +1,7 @@
 import type { TeamMemberRole } from '@prisma/client';
 import { DocumentStatus } from '@prisma/client';
 
+import type { DocumentDataVersion } from '../../types/document';
 import { hasSgcDownloadPrivileges } from '../../utils/teams';
 import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
 import { getTeamById } from '../team/get-team';
@@ -244,6 +245,34 @@ export const getEnvelopeItemDownloadDenial = ({
   }
 
   return policy.canDownloadSigned ? null : DOWNLOAD_DENIAL_REASON.DOWNLOAD_WINDOW_EXPIRED;
+};
+
+/**
+ * The viewer routes (`item.pdf`) hand out the same two stored versions as the
+ * download routes under different names: `initial` is the original document and
+ * `current` is the document with the collected signatures.
+ */
+export const toDownloadVersion = (version: DocumentDataVersion): TDocumentDownloadVersion => {
+  if (version === 'initial') {
+    return 'original';
+  }
+
+  return 'signed';
+};
+
+type GetEnvelopeItemViewDenialOptions = {
+  version: DocumentDataVersion;
+  policy: EnvelopeDownloadPolicy;
+};
+
+/**
+ * The reason a viewer request must be denied, or `null` when it is allowed.
+ */
+export const getEnvelopeItemViewDenial = ({
+  version,
+  policy,
+}: GetEnvelopeItemViewDenialOptions): TDownloadDenialReason | null => {
+  return getEnvelopeItemDownloadDenial({ version: toDownloadVersion(version), policy });
 };
 
 export const DOWNLOAD_DENIAL_MESSAGE: Record<TDownloadDenialReason, string> = {

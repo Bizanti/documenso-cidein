@@ -106,11 +106,12 @@ test.describe('Controlled signer file access', () => {
     const downloadRes = await request.get(downloadUrl(controlledRecipient.token, envelopeItem.id, 'signed'));
     expect(downloadRes.status()).toBe(403);
 
-    // The original unsigned document remains accessible.
+    // The original is restricted to ADMIN/SGC once the document is final, and
+    // the controlled signer is blocked from the final document either way.
     const initialRes = await request.get(
       itemPdfUrl(controlledRecipient.token, envelope.id, envelopeItem.id, envelopeItem.documentData.id, 'initial'),
     );
-    expect(initialRes.status()).toBe(200);
+    expect(initialRes.status()).toBe(403);
   });
 
   test('rejects controlled signer access to the final document once rejected', async ({ request }) => {

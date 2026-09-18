@@ -136,8 +136,10 @@ const handleStaticFileRequest = async ({
   c.header('ETag', etag);
 
   if (!isDownload) {
-    if (status === DocumentStatus.COMPLETED) {
-      c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    // Final documents are policy governed: the signed copy is bounded by the
+    // download window, so no shared or long lived cache may outlive it.
+    if (isFinalDocumentStatus(status)) {
+      c.header('Cache-Control', 'no-store, private');
     } else {
       c.header('Cache-Control', 'public, max-age=0, must-revalidate');
     }
