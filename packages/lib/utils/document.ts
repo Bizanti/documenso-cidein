@@ -70,6 +70,9 @@ export const extractDerivedDocumentMeta = (
 
     // Reminder settings.
     reminderSettings: meta.reminderSettings ?? settings.reminderSettings ?? null,
+
+    // Download window override (in hours). Null defers to the global setting.
+    downloadWindowHours: meta.downloadWindowHours ?? null,
   } satisfies Omit<DocumentMeta, 'id'>;
 };
 

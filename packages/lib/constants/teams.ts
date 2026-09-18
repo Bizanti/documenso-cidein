@@ -19,6 +19,10 @@ export const TEAM_INTERNAL_GROUPS: {
     type: OrganisationGroupType.INTERNAL_TEAM,
   },
   {
+    teamRole: TeamMemberRole.SGC,
+    type: OrganisationGroupType.INTERNAL_TEAM,
+  },
+  {
     teamRole: TeamMemberRole.MANAGER,
     type: OrganisationGroupType.INTERNAL_TEAM,
   },
@@ -28,6 +32,15 @@ export const TEAM_INTERNAL_GROUPS: {
   },
 ] as const;
 
+/**
+ * Team roles whose members hold SGC (quality management system) download
+ * privileges, such as downloading original documents and downloading signed
+ * documents after the download window has expired.
+ *
+ * Consumed by download policies via `hasSgcDownloadPrivileges`.
+ */
+export const TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES: TeamMemberRole[] = [TeamMemberRole.ADMIN, TeamMemberRole.SGC];
+
 export const TEAM_MEMBER_ROLE_PERMISSIONS_MAP = {
   DELETE_TEAM: [TeamMemberRole.ADMIN],
   MANAGE_TEAM: [TeamMemberRole.ADMIN, TeamMemberRole.MANAGER],
@@ -35,6 +48,7 @@ export const TEAM_MEMBER_ROLE_PERMISSIONS_MAP = {
 
 export const TEAM_DOCUMENT_VISIBILITY_MAP = {
   [TeamMemberRole.ADMIN]: [DocumentVisibility.ADMIN, DocumentVisibility.MANAGER_AND_ABOVE, DocumentVisibility.EVERYONE],
+  [TeamMemberRole.SGC]: [DocumentVisibility.ADMIN, DocumentVisibility.MANAGER_AND_ABOVE, DocumentVisibility.EVERYONE],
   [TeamMemberRole.MANAGER]: [DocumentVisibility.MANAGER_AND_ABOVE, DocumentVisibility.EVERYONE],
   [TeamMemberRole.MEMBER]: [DocumentVisibility.EVERYONE],
 } satisfies Record<TeamMemberRole, DocumentVisibility[]>;
@@ -46,7 +60,8 @@ export const TEAM_DOCUMENT_VISIBILITY_MAP = {
  * See `getHighestTeamRoleInGroup`
  */
 export const TEAM_MEMBER_ROLE_HIERARCHY = {
-  [TeamMemberRole.ADMIN]: [TeamMemberRole.ADMIN, TeamMemberRole.MANAGER, TeamMemberRole.MEMBER],
+  [TeamMemberRole.ADMIN]: [TeamMemberRole.ADMIN, TeamMemberRole.SGC, TeamMemberRole.MANAGER, TeamMemberRole.MEMBER],
+  [TeamMemberRole.SGC]: [TeamMemberRole.SGC, TeamMemberRole.MANAGER, TeamMemberRole.MEMBER],
   [TeamMemberRole.MANAGER]: [TeamMemberRole.MANAGER, TeamMemberRole.MEMBER],
   [TeamMemberRole.MEMBER]: [TeamMemberRole.MEMBER],
 } satisfies Record<TeamMemberRole, TeamMemberRole[]>;

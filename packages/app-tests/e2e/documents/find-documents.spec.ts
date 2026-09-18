@@ -1109,33 +1109,31 @@ test.describe('Find Documents UI - Sender Filter', () => {
       include: { members: { include: { user: true }, orderBy: { id: 'asc' } } },
     });
 
-    const member1 = org.members[1].user;
-    const member2 = org.members[2].user;
+    // Members are ordered by their randomly generated `member_<nanoid>` ids, so the
+    // owner is not guaranteed to sit at a fixed index — select the seeded members
+    // by excluding the owner instead of relying on positions.
+    const teamMembers = org.members.filter((member) => member.user.id !== owner.id);
+
+    const member1 = teamMembers[0].user;
+    const member2 = teamMembers[1].user;
 
     const { user: outsideUser } = await seedUser();
 
-    await seedDocuments([
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [outsideUser],
-        type: DocumentStatus.PENDING,
-        documentOptions: { title: 'Owner Sent Doc' },
-      },
-      {
-        sender: member1,
-        teamId: team.id,
-        recipients: [outsideUser],
-        type: DocumentStatus.PENDING,
-        documentOptions: { title: 'Member1 Sent Doc' },
-      },
-      {
-        sender: member2,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.DRAFT,
-        documentOptions: { title: 'Member2 Draft Doc' },
-      },
+    // Seeded with the individual helpers so the inserts are awaited before the table
+    // assertions below — `seedDocuments` resolves before its inserts complete.
+    await Promise.all([
+      seedPendingDocument(owner, team.id, [outsideUser], {
+        key: 0,
+        createDocumentOptions: { title: 'Owner Sent Doc' },
+      }),
+      seedPendingDocument(member1, team.id, [outsideUser], {
+        key: 1,
+        createDocumentOptions: { title: 'Member1 Sent Doc' },
+      }),
+      seedDraftDocument(member2, team.id, [], {
+        key: 2,
+        createDocumentOptions: { title: 'Member2 Draft Doc' },
+      }),
     ]);
 
     await apiSignin({

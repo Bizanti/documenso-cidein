@@ -3,6 +3,7 @@ import { useLingui } from '@lingui/react';
 
 import { Body, Container, Head, Html, Preview, Section } from '../components';
 import { TemplateBrandingLogo } from '../template-components/template-branding-logo';
+import { TemplateCustomMessageBody } from '../template-components/template-custom-message-body';
 import { TemplateDocumentRejectionConfirmed } from '../template-components/template-document-rejection-confirmed';
 import { TemplateFooter } from '../template-components/template-footer';
 
@@ -12,6 +13,7 @@ export type DocumentRejectionConfirmedEmailProps = {
   documentOwnerName: string;
   reason: string;
   assetBaseUrl?: string;
+  customBody?: string;
 };
 
 export function DocumentRejectionConfirmedEmail({
@@ -20,6 +22,7 @@ export function DocumentRejectionConfirmedEmail({
   documentOwnerName,
   reason,
   assetBaseUrl = 'http://localhost:3002',
+  customBody,
 }: DocumentRejectionConfirmedEmailProps) {
   const { _ } = useLingui();
 
@@ -37,12 +40,16 @@ export function DocumentRejectionConfirmedEmail({
             <Section>
               <TemplateBrandingLogo assetBaseUrl={assetBaseUrl} className="mb-4 h-6" />
 
-              <TemplateDocumentRejectionConfirmed
-                recipientName={recipientName}
-                documentName={documentName}
-                documentOwnerName={documentOwnerName}
-                reason={reason}
-              />
+              {customBody ? (
+                <TemplateCustomMessageBody text={customBody} />
+              ) : (
+                <TemplateDocumentRejectionConfirmed
+                  recipientName={recipientName}
+                  documentName={documentName}
+                  documentOwnerName={documentOwnerName}
+                  reason={reason}
+                />
+              )}
             </Section>
           </Container>
 

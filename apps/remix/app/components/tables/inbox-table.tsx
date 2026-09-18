@@ -15,7 +15,7 @@ import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
 import { Trans } from '@lingui/react/macro';
 import { DocumentStatus as DocumentStatusEnum, RecipientRole, SigningStatus } from '@prisma/client';
-import { CheckCircleIcon, DownloadIcon, EyeIcon, Loader, PencilIcon } from 'lucide-react';
+import { CheckCircleIcon, DownloadIcon, EyeIcon, Loader, LockIcon, PencilIcon } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { useMemo, useTransition } from 'react';
 import { useSearchParams } from 'react-router';
@@ -25,6 +25,8 @@ import { DocumentStatus } from '~/components/general/document/document-status';
 import { useOptionalCurrentTeam } from '~/providers/team';
 
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
+import { getEnvelopeDownloadPolicyRequests, useEnvelopeDownloadPolicy } from '../dialogs/envelope-download-policy';
+import { EnvelopeDownloadPolicyProvider } from '../dialogs/envelope-download-policy-provider';
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
 
 export type DocumentsTableProps = {
@@ -37,6 +39,8 @@ type DocumentsTableRow = TFindInboxResponse['data'][number];
 
 export const InboxTable = () => {
   const { _, i18n } = useLingui();
+
+  const { user } = useSession();
 
   const team = useOptionalCurrentTeam();
   const [isPending, startTransition] = useTransition();
@@ -106,58 +110,70 @@ export const InboxTable = () => {
     totalPages: 1,
   };
 
+  const downloadPolicyRequests = useMemo(
+    () =>
+      getEnvelopeDownloadPolicyRequests({
+        envelopes: results.data,
+        userEmail: user.email,
+        teamEmail: team?.teamEmail?.email,
+      }),
+    [results.data, team?.teamEmail?.email, user.email],
+  );
+
   return (
     <div className="relative">
-      <DataTable
-        columns={columns}
-        data={results.data}
-        perPage={results.perPage}
-        currentPage={results.currentPage}
-        totalPages={results.totalPages}
-        onPaginationChange={onPaginationChange}
-        columnVisibility={{
-          sender: team !== undefined,
-        }}
-        error={{
-          enable: isLoadingError || false,
-        }}
-        emptyState={
-          <div className="flex h-60 flex-col items-center justify-center gap-y-4 text-muted-foreground/60">
-            <p>
-              <Trans>Documents that require your attention will appear here</Trans>
-            </p>
-          </div>
-        }
-        skeleton={{
-          enable: isLoading || false,
-          rows: 5,
-          component: (
-            <>
-              <TableCell>
-                <Skeleton className="h-4 w-40 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-20 rounded-full" />
-              </TableCell>
-              <TableCell className="py-4">
-                <div className="flex w-full flex-row items-center">
-                  <Skeleton className="h-10 w-10 flex-shrink-0 rounded-full" />
-                </div>
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-20 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-10 w-24 rounded" />
-              </TableCell>
-            </>
-          ),
-        }}
-      >
-        {(table) =>
-          results.totalPages > 1 && <DataTablePagination additionalInformation="VisibleCount" table={table} />
-        }
-      </DataTable>
+      <EnvelopeDownloadPolicyProvider requests={downloadPolicyRequests}>
+        <DataTable
+          columns={columns}
+          data={results.data}
+          perPage={results.perPage}
+          currentPage={results.currentPage}
+          totalPages={results.totalPages}
+          onPaginationChange={onPaginationChange}
+          columnVisibility={{
+            sender: team !== undefined,
+          }}
+          error={{
+            enable: isLoadingError || false,
+          }}
+          emptyState={
+            <div className="flex h-60 flex-col items-center justify-center gap-y-4 text-muted-foreground/60">
+              <p>
+                <Trans>Documents that require your attention will appear here</Trans>
+              </p>
+            </div>
+          }
+          skeleton={{
+            enable: isLoading || false,
+            rows: 5,
+            component: (
+              <>
+                <TableCell>
+                  <Skeleton className="h-4 w-40 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                </TableCell>
+                <TableCell className="py-4">
+                  <div className="flex w-full flex-row items-center">
+                    <Skeleton className="h-10 w-10 flex-shrink-0 rounded-full" />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-10 w-24 rounded" />
+                </TableCell>
+              </>
+            ),
+          }}
+        >
+          {(table) =>
+            results.totalPages > 1 && <DataTablePagination additionalInformation="VisibleCount" table={table} />
+          }
+        </DataTable>
+      </EnvelopeDownloadPolicyProvider>
 
       {isPending && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/50">
@@ -184,6 +200,15 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
   const isSigned = recipient?.signingStatus === SigningStatus.SIGNED;
   const role = recipient?.role;
   const canDownload = role ? getRecipientRoleCapabilities(role).canDownload : true;
+
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({
+    envelopeId: row.envelopeId,
+    token: recipient?.token,
+    enabled: isComplete && canDownload,
+  });
+
+  const isDownloadLocked =
+    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
 
   if (!recipient) {
     return null;
@@ -233,18 +258,26 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
       </Button>
     ))
     .with({ isComplete: true, canDownload: false }, () => null)
-    .with({ isComplete: true }, () => (
-      <EnvelopeDownloadDialog
-        envelopeId={row.envelopeId}
-        envelopeStatus={row.status}
-        token={recipient?.token}
-        trigger={
-          <Button className="w-32">
-            <DownloadIcon className="mr-2 -ml-1 inline h-4 w-4" />
-            <Trans>Download</Trans>
-          </Button>
-        }
-      />
-    ))
+    .with({ isComplete: true }, () =>
+      isDownloadLocked ? (
+        <Button className="w-32" disabled title={_(msg`The download window for this document has expired.`)}>
+          <LockIcon className="mr-2 -ml-1 inline h-4 w-4" />
+          <Trans>Download locked</Trans>
+        </Button>
+      ) : (
+        <EnvelopeDownloadDialog
+          envelopeId={row.envelopeId}
+          envelopeStatus={row.status}
+          token={recipient?.token}
+          downloadPolicy={downloadPolicy}
+          trigger={
+            <Button className="w-32">
+              <DownloadIcon className="mr-2 -ml-1 inline h-4 w-4" />
+              <Trans>Download</Trans>
+            </Button>
+          }
+        />
+      ),
+    )
     .otherwise(() => <div></div>);
 };

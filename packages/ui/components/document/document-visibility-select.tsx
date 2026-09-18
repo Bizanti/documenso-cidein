@@ -1,17 +1,18 @@
 import { DOCUMENT_VISIBILITY } from '@documenso/lib/constants/document-visibility';
-import { DocumentVisibility } from '@documenso/lib/types/document-visibility';
+import { DocumentVisibility, type TDocumentVisibility } from '@documenso/lib/types/document-visibility';
+import { canAccessTeamDocument } from '@documenso/lib/utils/teams';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@documenso/ui/primitives/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@documenso/ui/primitives/tooltip';
 import { t } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
 import { Trans } from '@lingui/react/macro';
-import { TeamMemberRole } from '@prisma/client';
+import type { TeamMemberRole } from '@prisma/client';
 import type { SelectProps } from '@radix-ui/react-select';
 import { InfoIcon } from 'lucide-react';
 import { forwardRef } from 'react';
 
 export type DocumentVisibilitySelectType = SelectProps & {
-  currentTeamMemberRole?: string;
+  currentTeamMemberRole?: TeamMemberRole;
   isTeamSettings?: boolean;
   disabled?: boolean;
   canUpdateVisibility?: boolean;
@@ -21,8 +22,9 @@ export const DocumentVisibilitySelect = forwardRef<HTMLButtonElement, DocumentVi
   ({ currentTeamMemberRole, isTeamSettings = false, disabled, canUpdateVisibility, ...props }, ref) => {
     const { _ } = useLingui();
 
-    const isAdmin = currentTeamMemberRole === TeamMemberRole.ADMIN;
-    const isManager = currentTeamMemberRole === TeamMemberRole.MANAGER;
+    const canSelectVisibility = (visibility: TDocumentVisibility) =>
+      currentTeamMemberRole !== undefined && canAccessTeamDocument(currentTeamMemberRole, visibility);
+
     const canEdit = isTeamSettings || canUpdateVisibility;
 
     return (
@@ -33,10 +35,13 @@ export const DocumentVisibilitySelect = forwardRef<HTMLButtonElement, DocumentVi
 
         <SelectContent position="popper">
           <SelectItem value={DocumentVisibility.EVERYONE}>{_(DOCUMENT_VISIBILITY.EVERYONE.value)}</SelectItem>
-          <SelectItem value={DocumentVisibility.MANAGER_AND_ABOVE} disabled={!isAdmin && !isManager}>
+          <SelectItem
+            value={DocumentVisibility.MANAGER_AND_ABOVE}
+            disabled={!canSelectVisibility(DocumentVisibility.MANAGER_AND_ABOVE)}
+          >
             {_(DOCUMENT_VISIBILITY.MANAGER_AND_ABOVE.value)}
           </SelectItem>
-          <SelectItem value={DocumentVisibility.ADMIN} disabled={!isAdmin}>
+          <SelectItem value={DocumentVisibility.ADMIN} disabled={!canSelectVisibility(DocumentVisibility.ADMIN)}>
             {_(DOCUMENT_VISIBILITY.ADMIN.value)}
           </SelectItem>
         </SelectContent>

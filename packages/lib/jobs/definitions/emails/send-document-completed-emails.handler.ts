@@ -6,7 +6,9 @@ import { createElement } from 'react';
 
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
+import { applyEmailTemplateOverride } from '../../../server-only/email/apply-email-template-override';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { getEmailTemplateOverride } from '../../../server-only/email/get-email-template-override';
 import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limit/assert-organisation-rates-and-limits';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../../types/document-audit-logs';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
@@ -112,6 +114,17 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
   const isDocumentCompletedEmailEnabled = emailSettings.documentCompleted;
   const isOwnerDocumentCompletedEmailEnabled = emailSettings.ownerDocumentCompleted;
 
+  // Admin-defined global template override for the completion email.
+  const templateOverride = await getEmailTemplateOverride('document-completed');
+
+  const buildTemplateVariables = (recipientName: string, recipientEmail: string) => ({
+    documentName: envelope.title,
+    recipientName,
+    recipientEmail,
+    senderName: owner.name || '',
+    senderEmail: owner.email,
+  });
+
   // Send email to document owner if:
   // 1. Owner document completed emails are enabled AND
   // 2. Either:
@@ -121,10 +134,20 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
     isOwnerDocumentCompletedEmailEnabled &&
     (!envelope.recipients.find((recipient) => recipient.email === owner.email) || !isDocumentCompletedEmailEnabled)
   ) {
+    const i18n = await getI18nInstance(emailLanguage);
+
+    const appliedOwnerTemplate = applyEmailTemplateOverride({
+      subject: i18n._(msg`Signing Complete!`),
+      body: '',
+      override: templateOverride,
+      variables: buildTemplateVariables(owner.name || '', owner.email),
+    });
+
     const template = createElement(DocumentCompletedEmailTemplate, {
       documentName: envelope.title,
       assetBaseUrl,
       downloadLink: documentOwnerDownloadLink,
+      customBody: appliedOwnerTemplate.hasBodyOverride ? appliedOwnerTemplate.body : undefined,
     });
 
     const [html, text] = await Promise.all([
@@ -136,8 +159,6 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
       }),
     ]);
 
-    const i18n = await getI18nInstance(emailLanguage);
-
     await emailTransport.sendMail({
       to: [
         {
@@ -147,7 +168,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
       ],
       from: senderEmail,
       replyTo: replyToEmail,
-      subject: i18n._(msg`Signing Complete!`),
+      subject: appliedOwnerTemplate.subject,
       html,
       text,
       attachments: completedDocumentEmailAttachments,
@@ -210,18 +231,36 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
         'document.name': envelope.title,
       };
 
+      const i18n = await getI18nInstance(emailLanguage);
+
+      const hasCustomMetaSubject = isDirectTemplate && Boolean(envelope.documentMeta?.subject);
+      const hasCustomMetaMessage = isDirectTemplate && Boolean(envelope.documentMeta?.message);
+
+      const appliedTemplate = applyEmailTemplateOverride({
+        subject: i18n._(msg`Signing Complete!`),
+        body: '',
+        override: templateOverride,
+        variables: buildTemplateVariables(recipient.name, recipient.email),
+      });
+
       const downloadLink = `${NEXT_PUBLIC_WEBAPP_URL()}/sign/${recipient.token}/complete`;
       const reportUrl =
         recipient.role === RecipientRole.CC ? `${NEXT_PUBLIC_WEBAPP_URL()}/report/${recipient.token}` : undefined;
+
+      // A per-document custom message wins over the global template override.
+      let customBody: string | undefined;
+
+      if (hasCustomMetaMessage && envelope.documentMeta?.message) {
+        customBody = renderCustomEmailTemplate(envelope.documentMeta.message, customEmailTemplate);
+      } else if (appliedTemplate.hasBodyOverride) {
+        customBody = appliedTemplate.body;
+      }
 
       const template = createElement(DocumentCompletedEmailTemplate, {
         documentName: envelope.title,
         assetBaseUrl,
         downloadLink: recipient.email === owner.email ? documentOwnerDownloadLink : downloadLink,
-        customBody:
-          isDirectTemplate && envelope.documentMeta?.message
-            ? renderCustomEmailTemplate(envelope.documentMeta.message, customEmailTemplate)
-            : undefined,
+        customBody,
         reportUrl,
         allowDownload: !isControlledSigner,
       });
@@ -235,8 +274,6 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
         }),
       ]);
 
-      const i18n = await getI18nInstance(emailLanguage);
-
       await emailTransport.sendMail({
         to: [
           {
@@ -247,9 +284,9 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
         from: senderEmail,
         replyTo: replyToEmail,
         subject:
-          isDirectTemplate && envelope.documentMeta?.subject
+          hasCustomMetaSubject && envelope.documentMeta?.subject
             ? renderCustomEmailTemplate(envelope.documentMeta.subject, customEmailTemplate)
-            : i18n._(msg`Signing Complete!`),
+            : appliedTemplate.subject,
         html,
         text,
         attachments: isControlledSigner ? [] : completedDocumentEmailAttachments,

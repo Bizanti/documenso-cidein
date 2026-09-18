@@ -5,11 +5,11 @@ import { DOCUMENT_DISTRIBUTION_METHODS, DOCUMENT_SIGNATURE_TYPES } from '@docume
 import { SUPPORTED_LANGUAGES } from '@documenso/lib/constants/i18n';
 import { DEFAULT_DOCUMENT_TIME_ZONE, TIME_ZONES } from '@documenso/lib/constants/time-zones';
 import { ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';
-import type { TDocumentMetaDateFormat } from '@documenso/lib/types/document-meta';
+import { MAX_DOWNLOAD_WINDOW_HOURS, type TDocumentMetaDateFormat } from '@documenso/lib/types/document-meta';
 import type { TRecipientLite } from '@documenso/lib/types/recipient';
 import type { TTemplate } from '@documenso/lib/types/template';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
-import { extractTeamSignatureSettings } from '@documenso/lib/utils/teams';
+import { canChangeTeamDocumentVisibility, extractTeamSignatureSettings } from '@documenso/lib/utils/teams';
 import { trpc } from '@documenso/trpc/react';
 import {
   DocumentGlobalAuthAccessSelect,
@@ -26,20 +26,21 @@ import {
 } from '@documenso/ui/components/document/document-visibility-select';
 import { TemplateTypeSelect, TemplateTypeTooltip } from '@documenso/ui/components/template/template-type-select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@documenso/ui/primitives/accordion';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@documenso/ui/primitives/form/form';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@documenso/ui/primitives/form/form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Trans, useLingui } from '@lingui/react/macro';
-import {
-  DocumentDistributionMethod,
-  DocumentVisibility,
-  type Field,
-  TeamMemberRole,
-  TemplateType,
-} from '@prisma/client';
+import { DocumentDistributionMethod, type Field, type TeamMemberRole, TemplateType } from '@prisma/client';
 import { InfoIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { match } from 'ts-pattern';
 
 import { DocumentEmailCheckboxes } from '../../components/document/document-email-checkboxes';
 import { DocumentReadOnlyFields, mapFieldsWithRecipients } from '../../components/document/document-read-only-fields';
@@ -113,6 +114,7 @@ export const AddTemplateSettingsFormPartial = ({
         emailReplyTo: template.templateMeta?.emailReplyTo ?? undefined,
         emailSettings: ZDocumentEmailSettingsSchema.parse(template?.templateMeta?.emailSettings),
         signatureTypes: extractTeamSignatureSettings(template?.templateMeta),
+        downloadWindowHours: template.templateMeta?.downloadWindowHours ?? null,
       },
     },
   });
@@ -129,15 +131,8 @@ export const AddTemplateSettingsFormPartial = ({
 
   const emails = emailData?.data || [];
 
-  const canUpdateVisibility = match(currentTeamMemberRole)
-    .with(TeamMemberRole.ADMIN, () => true)
-    .with(
-      TeamMemberRole.MANAGER,
-      () =>
-        template.visibility === DocumentVisibility.EVERYONE ||
-        template.visibility === DocumentVisibility.MANAGER_AND_ABOVE,
-    )
-    .otherwise(() => false);
+  const canUpdateVisibility =
+    currentTeamMemberRole !== undefined && canChangeTeamDocumentVisibility(currentTeamMemberRole, template.visibility);
 
   // We almost always want to set the timezone to the user's local timezone to avoid confusion
   // when the document is signed.
@@ -706,6 +701,52 @@ export const AddTemplateSettingsFormPartial = ({
                           <FormControl>
                             <Input className="bg-background" {...field} maxLength={255} onBlur={handleAutoSave} />
                           </FormControl>
+
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="meta.downloadWindowHours"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex flex-row items-center">
+                            <Trans>Download window</Trans>{' '}
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <InfoIcon className="mx-2 h-4 w-4" />
+                              </TooltipTrigger>
+
+                              <TooltipContent className="max-w-xs text-muted-foreground">
+                                <Trans>
+                                  How long documents created from this template can be downloaded after they are
+                                  completed. Only administrators and the SGC role can download them afterwards.
+                                </Trans>
+                              </TooltipContent>
+                            </Tooltip>
+                          </FormLabel>
+
+                          <FormControl>
+                            <Input
+                              className="bg-background"
+                              data-testid="template-download-window-hours"
+                              type="number"
+                              min={1}
+                              max={MAX_DOWNLOAD_WINDOW_HOURS}
+                              {...field}
+                              value={field.value ?? ''}
+                              onChange={(event) =>
+                                field.onChange(event.target.value === '' ? null : Number(event.target.value))
+                              }
+                              onBlur={handleAutoSave}
+                            />
+                          </FormControl>
+
+                          <FormDescription>
+                            <Trans>Hours. Leave empty to use the global download window.</Trans>
+                          </FormDescription>
 
                           <FormMessage />
                         </FormItem>

@@ -1,5 +1,6 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { isFinalDocumentStatus } from '@documenso/lib/server-only/document/download-policy';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { generatePartialSignedPdf } from '@documenso/lib/server-only/pdf/generate-partial-signed-pdf';
 import { getTeamById } from '@documenso/lib/server-only/team/get-team';
@@ -135,8 +136,10 @@ const handleStaticFileRequest = async ({
   c.header('ETag', etag);
 
   if (!isDownload) {
-    if (status === DocumentStatus.COMPLETED) {
-      c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    // Final documents are policy governed: the signed copy is bounded by the
+    // download window, so no shared or long lived cache may outlive it.
+    if (isFinalDocumentStatus(status)) {
+      c.header('Cache-Control', 'no-store, private');
     } else {
       c.header('Cache-Control', 'public, max-age=0, must-revalidate');
     }
@@ -300,11 +303,9 @@ export const isRoleRestrictedFromCompletedFile = (role: RecipientRole): boolean 
 
 /**
  * Envelope statuses in which the stored document data represents the final
- * document: completed, or rejected with the collected signatures burned in.
+ * document. See `download-policy.ts` for the download rules built on top.
  */
-export const isFinalDocumentStatus = (status: DocumentStatus): boolean => {
-  return status === DocumentStatus.COMPLETED || status === DocumentStatus.REJECTED;
-};
+export { isFinalDocumentStatus };
 
 type ShouldRestrictTokenFileAccessOptions = {
   token: string;

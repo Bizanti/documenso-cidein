@@ -1,6 +1,12 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
 import { APP_DOCUMENT_UPLOAD_SIZE_LIMIT } from '@documenso/lib/constants/app';
 import { AppError } from '@documenso/lib/errors/app-error';
+import {
+  DOWNLOAD_DENIAL_MESSAGE,
+  getEnvelopeItemDownloadDenial,
+  getRecipientDownloadPolicy,
+  getUserDownloadPolicy,
+} from '@documenso/lib/server-only/document/download-policy';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/put-file.server';
 import { prisma } from '@documenso/prisma';
@@ -93,6 +99,11 @@ export const filesRoute = new Hono<HonoEnv>()
           id: envelopeId,
         },
         include: {
+          documentMeta: {
+            select: {
+              downloadWindowHours: true,
+            },
+          },
           envelopeItems: {
             where: {
               id: envelopeItemId,
@@ -123,6 +134,25 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (!hasAccess) {
         return c.json({ error: 'User does not have access to the team that this envelope is associated with' }, 403);
+      }
+
+      // The viewer hands out the same stored bytes as the download routes, so it
+      // answers to the same policy.
+      const downloadPolicy = await getUserDownloadPolicy({
+        userId,
+        teamId: envelope.teamId,
+        status: envelope.status,
+        completedAt: envelope.completedAt,
+        downloadWindowHours: envelope.documentMeta?.downloadWindowHours,
+      });
+
+      const viewDenial = getEnvelopeItemDownloadDenial({
+        version: 'signed',
+        policy: downloadPolicy,
+      });
+
+      if (viewDenial) {
+        return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[viewDenial], code: viewDenial }, 403);
       }
 
       if (!envelopeItem.documentData) {
@@ -173,6 +203,11 @@ export const filesRoute = new Hono<HonoEnv>()
                 signingStatus: true,
               },
             },
+            documentMeta: {
+              select: {
+                downloadWindowHours: true,
+              },
+            },
           },
         });
 
@@ -200,6 +235,23 @@ export const filesRoute = new Hono<HonoEnv>()
             },
             403,
           );
+        }
+
+        const downloadPolicy = await getUserDownloadPolicy({
+          userId: session.user.id,
+          teamId: envelope.teamId,
+          status: envelope.status,
+          completedAt: envelope.completedAt,
+          downloadWindowHours: envelope.documentMeta?.downloadWindowHours,
+        });
+
+        const downloadDenial = getEnvelopeItemDownloadDenial({
+          version,
+          policy: downloadPolicy,
+        });
+
+        if (downloadDenial) {
+          return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
         }
 
         if (!envelopeItem.documentData) {
@@ -269,7 +321,15 @@ export const filesRoute = new Hono<HonoEnv>()
       const envelopeItem = await prisma.envelopeItem.findUnique({
         where: envelopeWhereQuery,
         include: {
-          envelope: true,
+          envelope: {
+            include: {
+              documentMeta: {
+                select: {
+                  downloadWindowHours: true,
+                },
+              },
+            },
+          },
           documentData: true,
         },
       });
@@ -288,6 +348,23 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (isViewRestricted) {
         return c.json({ error: 'Controlled signers are not permitted to access the final document' }, 403);
+      }
+
+      // The viewer hands out the same stored bytes as the download routes, so it
+      // answers to the same policy. Recipients never hold team privileges.
+      const downloadPolicy = await getRecipientDownloadPolicy({
+        status: envelopeItem.envelope.status,
+        completedAt: envelopeItem.envelope.completedAt,
+        downloadWindowHours: envelopeItem.envelope.documentMeta?.downloadWindowHours,
+      });
+
+      const viewDenial = getEnvelopeItemDownloadDenial({
+        version: 'signed',
+        policy: downloadPolicy,
+      });
+
+      if (viewDenial) {
+        return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[viewDenial], code: viewDenial }, 403);
       }
 
       if (!envelopeItem.documentData) {
@@ -333,7 +410,15 @@ export const filesRoute = new Hono<HonoEnv>()
       const envelopeItem = await prisma.envelopeItem.findUnique({
         where: envelopeWhereQuery,
         include: {
-          envelope: true,
+          envelope: {
+            include: {
+              documentMeta: {
+                select: {
+                  downloadWindowHours: true,
+                },
+              },
+            },
+          },
           documentData: true,
         },
       });
@@ -346,6 +431,21 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
         return c.json({ error: 'Controlled signers are not permitted to download this document' }, 403);
+      }
+
+      const downloadPolicy = await getRecipientDownloadPolicy({
+        status: envelopeItem.envelope.status,
+        completedAt: envelopeItem.envelope.completedAt,
+        downloadWindowHours: envelopeItem.envelope.documentMeta?.downloadWindowHours,
+      });
+
+      const downloadDenial = getEnvelopeItemDownloadDenial({
+        version,
+        policy: downloadPolicy,
+      });
+
+      if (downloadDenial) {
+        return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
       }
 
       if (!envelopeItem.documentData) {

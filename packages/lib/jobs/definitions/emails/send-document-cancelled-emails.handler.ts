@@ -7,7 +7,9 @@ import { createElement } from 'react';
 
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
+import { applyEmailTemplateOverride } from '../../../server-only/email/apply-email-template-override';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
+import { getEmailTemplateOverride } from '../../../server-only/email/get-email-template-override';
 import { assertOrganisationRatesAndLimits } from '../../../server-only/rate-limit/assert-organisation-rates-and-limits';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
 import { unsafeBuildEnvelopeIdQuery } from '../../../utils/envelope';
@@ -88,6 +90,9 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCancelledEmai
 
   const i18n = await getI18nInstance(emailLanguage);
 
+  // Admin-defined global template override for the cancellation email.
+  const templateOverride = await getEmailTemplateOverride('document-cancelled');
+
   // Send cancellation emails to recipients who have been sent the document or viewed it.
   // CC recipients are excluded because they were never actually emailed about the document
   // (CC recipients are created with sendStatus=SENT by default but never receive a signing
@@ -125,12 +130,26 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCancelledEmai
           return;
         }
 
+        const appliedTemplate = applyEmailTemplateOverride({
+          subject: i18n._(msg`Document "${envelope.title}" Cancelled`),
+          body: '',
+          override: templateOverride,
+          variables: {
+            documentName: envelope.title,
+            recipientName: recipient.name,
+            recipientEmail: recipient.email,
+            senderName: documentOwner.name || '',
+            senderEmail: documentOwner.email,
+          },
+        });
+
         const template = createElement(DocumentCancelTemplate, {
           documentName: envelope.title,
           inviterName: documentOwner.name || undefined,
           inviterEmail: documentOwner.email,
           assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
           cancellationReason: cancellationReason || 'The document has been cancelled.',
+          customBody: appliedTemplate.hasBodyOverride ? appliedTemplate.body : undefined,
         });
 
         const [html, text] = await Promise.all([
@@ -149,7 +168,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCancelledEmai
           },
           from: senderEmail,
           replyTo: replyToEmail,
-          subject: i18n._(msg`Document "${envelope.title}" Cancelled`),
+          subject: appliedTemplate.subject,
           html,
           text,
         });

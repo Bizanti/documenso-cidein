@@ -155,7 +155,7 @@ export const DocumentEditForm = ({ className, initialDocument, documentRootPath 
   });
 
   const saveSettingsData = async (data: TAddSettingsFormSchema) => {
-    const { timezone, dateFormat, redirectUrl, language, signatureTypes } = data.meta;
+    const { timezone, dateFormat, redirectUrl, language, signatureTypes, downloadWindowHours } = data.meta;
 
     const parsedGlobalAccessAuth = z.array(ZDocumentAccessAuthTypesSchema).safeParse(data.globalAccessAuth);
 
@@ -176,6 +176,7 @@ export const DocumentEditForm = ({ className, initialDocument, documentRootPath 
         typedSignatureEnabled: signatureTypes.includes(DocumentSignatureType.TYPE),
         uploadSignatureEnabled: signatureTypes.includes(DocumentSignatureType.UPLOAD),
         drawSignatureEnabled: signatureTypes.includes(DocumentSignatureType.DRAW),
+        downloadWindowHours: downloadWindowHours ?? null,
       },
     });
   };

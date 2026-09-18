@@ -4,15 +4,18 @@ import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { findRecipientByEmail, getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
 import { Button } from '@documenso/ui/primitives/button';
+import { msg } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react';
 import { Trans } from '@lingui/react/macro';
 import { DocumentStatus, RecipientRole, SigningStatus } from '@prisma/client';
-import { CheckCircle, Download, Edit, EyeIcon, Pencil } from 'lucide-react';
+import { CheckCircle, Download, Edit, EyeIcon, LockIcon, Pencil } from 'lucide-react';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { useCurrentTeam } from '~/providers/team';
 
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
+import { useEnvelopeDownloadPolicy } from '../dialogs/envelope-download-policy';
 
 export type DocumentsTableActionButtonProps = {
   row: TDocumentRow;
@@ -20,6 +23,7 @@ export type DocumentsTableActionButtonProps = {
 
 export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonProps) => {
   const { user } = useSession();
+  const { _ } = useLingui();
 
   const team = useCurrentTeam();
 
@@ -38,6 +42,15 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
   const role = recipient?.role;
   const canDownload = role ? getRecipientRoleCapabilities(role).canDownload : true;
   const isCurrentTeamDocument = team && row.team?.url === team.url;
+
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({
+    envelopeId: row.envelopeId,
+    token: recipient?.token,
+    enabled: isComplete && canDownload,
+  });
+
+  const isDownloadLocked =
+    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
 
   const documentsPath = formatDocumentsPath(team.url);
   const formatPath = `${documentsPath}/${row.envelopeId}/edit`;
@@ -98,18 +111,26 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
       </Button>
     ))
     .with({ isComplete: true, canDownload: false }, () => null)
-    .with({ isComplete: true }, () => (
-      <EnvelopeDownloadDialog
-        envelopeId={row.envelopeId}
-        envelopeStatus={row.status}
-        token={recipient?.token}
-        trigger={
-          <Button className="w-32">
-            <Download className="mr-2 -ml-1 inline h-4 w-4" />
-            <Trans>Download</Trans>
-          </Button>
-        }
-      />
-    ))
+    .with({ isComplete: true }, () =>
+      isDownloadLocked ? (
+        <Button className="w-32" disabled title={_(msg`The download window for this document has expired.`)}>
+          <LockIcon className="mr-2 -ml-1 inline h-4 w-4" />
+          <Trans>Download locked</Trans>
+        </Button>
+      ) : (
+        <EnvelopeDownloadDialog
+          envelopeId={row.envelopeId}
+          envelopeStatus={row.status}
+          token={recipient?.token}
+          downloadPolicy={downloadPolicy}
+          trigger={
+            <Button className="w-32">
+              <Download className="mr-2 -ml-1 inline h-4 w-4" />
+              <Trans>Download</Trans>
+            </Button>
+          }
+        />
+      ),
+    )
     .otherwise(() => <div></div>);
 };

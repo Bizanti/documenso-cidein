@@ -1,0 +1,521 @@
+import { DocumentStatus, TeamMemberRole } from '@prisma/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
+import { getTeamById } from '../team/get-team';
+import {
+  buildEnvelopeDownloadPolicy,
+  DOWNLOAD_DENIAL_REASON,
+  getDownloadWindowExpiresAt,
+  getEnvelopeDownloadPolicy,
+  getEnvelopeItemDownloadDenial,
+  getEnvelopeItemViewDenial,
+  getUserDownloadPolicy,
+  isDownloadWindowExpired,
+  isFinalDocumentStatus,
+  toDownloadVersion,
+} from './download-policy';
+
+vi.mock('../site-settings/get-download-window-hours');
+vi.mock('../team/get-team');
+
+const HOUR_IN_MS = 60 * 60 * 1000;
+
+const completedAt = new Date('2026-01-01T12:00:00.000Z');
+
+const hoursAfter = (date: Date, hours: number) => new Date(date.getTime() + hours * HOUR_IN_MS);
+
+describe('isFinalDocumentStatus', () => {
+  it('treats completed and rejected envelopes as final', () => {
+    expect(isFinalDocumentStatus(DocumentStatus.COMPLETED)).toBe(true);
+    expect(isFinalDocumentStatus(DocumentStatus.REJECTED)).toBe(true);
+  });
+
+  it('does not treat in-flight envelopes as final', () => {
+    expect(isFinalDocumentStatus(DocumentStatus.DRAFT)).toBe(false);
+    expect(isFinalDocumentStatus(DocumentStatus.PENDING)).toBe(false);
+    expect(isFinalDocumentStatus(DocumentStatus.CANCELLED)).toBe(false);
+  });
+});
+
+describe('getDownloadWindowExpiresAt', () => {
+  it('returns null when downloads do not expire', () => {
+    expect(getDownloadWindowExpiresAt({ completedAt, windowHours: null })).toBeNull();
+  });
+
+  it('returns null when the envelope has not finished yet', () => {
+    expect(getDownloadWindowExpiresAt({ completedAt: null, windowHours: 48 })).toBeNull();
+  });
+
+  it('adds the window to the completion date', () => {
+    expect(getDownloadWindowExpiresAt({ completedAt, windowHours: 48 })).toEqual(hoursAfter(completedAt, 48));
+  });
+});
+
+describe('isDownloadWindowExpired', () => {
+  it('is false before the window elapses and true at the boundary', () => {
+    expect(
+      isDownloadWindowExpired({
+        status: DocumentStatus.COMPLETED,
+        completedAt,
+        windowHours: 48,
+        now: hoursAfter(completedAt, 47),
+      }),
+    ).toBe(false);
+
+    expect(
+      isDownloadWindowExpired({
+        status: DocumentStatus.COMPLETED,
+        completedAt,
+        windowHours: 48,
+        now: hoursAfter(completedAt, 48),
+      }),
+    ).toBe(true);
+  });
+
+  it('never expires in-flight envelopes', () => {
+    expect(
+      isDownloadWindowExpired({
+        status: DocumentStatus.PENDING,
+        completedAt,
+        windowHours: 1,
+        now: hoursAfter(completedAt, 100),
+      }),
+    ).toBe(false);
+  });
+
+  it('never expires when there is no window', () => {
+    expect(
+      isDownloadWindowExpired({
+        status: DocumentStatus.COMPLETED,
+        completedAt,
+        windowHours: null,
+        now: hoursAfter(completedAt, 1000),
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('buildEnvelopeDownloadPolicy', () => {
+  it('restricts downloads to ADMIN and SGC once the window has elapsed', () => {
+    const now = hoursAfter(completedAt, 49);
+
+    const forMember = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: TeamMemberRole.MEMBER,
+      now,
+    });
+
+    expect(forMember).toMatchObject({
+      isDownloadWindowExpired: true,
+      canDownloadSigned: false,
+      canDownloadOriginal: false,
+    });
+
+    const forManager = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: TeamMemberRole.MANAGER,
+      now,
+    });
+
+    expect(forManager.canDownloadSigned).toBe(false);
+
+    const forAdmin = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: TeamMemberRole.ADMIN,
+      now,
+    });
+
+    expect(forAdmin).toMatchObject({
+      isDownloadWindowExpired: true,
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+      isSgcPrivileged: true,
+    });
+
+    const forSgc = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: TeamMemberRole.SGC,
+      now,
+    });
+
+    expect(forSgc).toMatchObject({
+      isDownloadWindowExpired: true,
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+      isSgcPrivileged: true,
+    });
+  });
+
+  it('only offers the signed copy to non-privileged members once a final copy exists', () => {
+    const policy = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: TeamMemberRole.MEMBER,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(policy).toMatchObject({
+      isDownloadWindowExpired: false,
+      canDownloadSigned: true,
+      canDownloadOriginal: false,
+    });
+  });
+
+  it('never offers the original to recipients of a final document', () => {
+    const policy = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: null,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(policy).toMatchObject({
+      canDownloadSigned: false,
+      canDownloadOriginal: false,
+      isSgcPrivileged: false,
+    });
+  });
+
+  it('keeps the working copy downloadable while the document is not final', () => {
+    const policy = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+      windowHours: 48,
+      role: null,
+    });
+
+    expect(policy).toMatchObject({
+      isDownloadWindowExpired: false,
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+    });
+  });
+
+  it('does not expire downloads when the window is null', () => {
+    const policy = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: null,
+      role: TeamMemberRole.MEMBER,
+      now: hoursAfter(completedAt, 100000),
+    });
+
+    expect(policy).toMatchObject({
+      downloadWindowHours: null,
+      downloadWindowExpiresAt: null,
+      isDownloadWindowExpired: false,
+      canDownloadSigned: true,
+      canDownloadOriginal: false,
+    });
+  });
+});
+
+describe('getEnvelopeDownloadPolicy', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('prefers the document override over the global setting', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(24);
+
+    const policy = await getEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      downloadWindowHours: 48,
+      role: TeamMemberRole.MEMBER,
+    });
+
+    expect(policy.downloadWindowHours).toBe(48);
+    expect(policy.downloadWindowExpiresAt).toEqual(hoursAfter(completedAt, 48));
+  });
+
+  it('falls back to the global setting when there is no override', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(24);
+
+    const policy = await getEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      downloadWindowHours: null,
+      role: TeamMemberRole.MEMBER,
+    });
+
+    expect(policy.downloadWindowHours).toBe(24);
+    expect(policy.downloadWindowExpiresAt).toEqual(hoursAfter(completedAt, 24));
+  });
+
+  it('does not expire downloads when the global setting is disabled', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+
+    const policy = await getEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      role: TeamMemberRole.MEMBER,
+    });
+
+    expect(policy.downloadWindowHours).toBeNull();
+    expect(policy.isDownloadWindowExpired).toBe(false);
+    expect(policy.canDownloadSigned).toBe(true);
+  });
+});
+
+describe('getUserDownloadPolicy', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  const mockTeamRole = (role: TeamMemberRole) => {
+    vi.mocked(getTeamById).mockResolvedValue({
+      currentTeamRole: role,
+    } as unknown as Awaited<ReturnType<typeof getTeamById>>);
+  };
+
+  it('keeps the original and post-window access for ADMIN and SGC', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.SGC);
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(policy).toMatchObject({
+      isDownloadWindowExpired: true,
+      isSgcPrivileged: true,
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+    });
+  });
+
+  it('restricts non privileged team roles', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.MANAGER);
+
+    const expiredPolicy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(expiredPolicy).toMatchObject({
+      isDownloadWindowExpired: true,
+      canDownloadSigned: false,
+      canDownloadOriginal: false,
+    });
+
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(48);
+
+    const activePolicy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(activePolicy).toMatchObject({
+      isDownloadWindowExpired: false,
+      canDownloadSigned: true,
+      canDownloadOriginal: false,
+    });
+  });
+
+  it('treats users outside the envelope team as non privileged', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+    vi.mocked(getTeamById).mockRejectedValue(new Error('Team not found'));
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+    });
+
+    expect(policy).toMatchObject({
+      isSgcPrivileged: false,
+      canDownloadOriginal: false,
+    });
+  });
+
+  it('keeps the working copy available while the document is not final', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.MEMBER);
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+    });
+
+    expect(policy).toMatchObject({
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+    });
+  });
+});
+
+describe('getEnvelopeItemDownloadDenial', () => {
+  it('denies the original version when it is restricted', () => {
+    const policy = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: TeamMemberRole.MEMBER,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(getEnvelopeItemDownloadDenial({ version: 'original', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN,
+    );
+    expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBeNull();
+  });
+
+  it('denies the signed version past the download window', () => {
+    const policy = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: null,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.DOWNLOAD_WINDOW_EXPIRED,
+    );
+  });
+
+  it('allows privileged members to download both versions', () => {
+    const policy = buildEnvelopeDownloadPolicy({
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      windowHours: 48,
+      role: TeamMemberRole.SGC,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(getEnvelopeItemDownloadDenial({ version: 'original', policy })).toBeNull();
+    expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBeNull();
+    expect(getEnvelopeItemDownloadDenial({ version: 'pending', policy })).toBeNull();
+  });
+});
+
+describe('toDownloadVersion', () => {
+  it('maps the viewer versions onto the download versions', () => {
+    expect(toDownloadVersion('initial')).toBe('original');
+    expect(toDownloadVersion('current')).toBe('signed');
+  });
+});
+
+describe('getEnvelopeItemViewDenial', () => {
+  const policyFor = ({
+    status,
+    role,
+    now,
+    windowHours = 48,
+  }: {
+    status: DocumentStatus;
+    role: TeamMemberRole | null;
+    now: Date;
+    windowHours?: number | null;
+  }) =>
+    buildEnvelopeDownloadPolicy({
+      status,
+      completedAt,
+      windowHours,
+      role,
+      now,
+    });
+
+  it('denies the initial version to recipients and members of a final document', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: TeamMemberRole.MEMBER,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN,
+    );
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+  });
+
+  it('keeps the initial version for ADMIN and SGC', () => {
+    const policy = policyFor({
+      status: DocumentStatus.REJECTED,
+      role: TeamMemberRole.SGC,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBeNull();
+  });
+
+  it('denies the current version once the download window elapses', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: null,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.DOWNLOAD_WINDOW_EXPIRED,
+    );
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN,
+    );
+  });
+
+  it('leaves both versions to privileged viewers past the window', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: TeamMemberRole.ADMIN,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBeNull();
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+  });
+
+  it('keeps both versions while the document is not final', () => {
+    const policy = policyFor({
+      status: DocumentStatus.PENDING,
+      role: null,
+      now: hoursAfter(completedAt, 100),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBeNull();
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+  });
+
+  it('keeps both versions while the window is disabled', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: null,
+      windowHours: null,
+      now: hoursAfter(completedAt, 100000),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN,
+    );
+  });
+});

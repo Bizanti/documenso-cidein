@@ -1,5 +1,10 @@
 import { PDF_SIZE_A4_72PPI } from '@documenso/lib/constants/pdf';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import {
+  DOWNLOAD_DENIAL_MESSAGE,
+  getEnvelopeItemDownloadDenial,
+  getUserDownloadPolicy,
+} from '@documenso/lib/server-only/document/download-policy';
 import { getEnvelopeById, getEnvelopeWhereInput } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { generateAuditLogPdf } from '@documenso/lib/server-only/pdf/generate-audit-log-pdf';
 import { generateCertificatePdf } from '@documenso/lib/server-only/pdf/generate-certificate-pdf';
@@ -16,6 +21,7 @@ import type { HonoEnv } from '../../router';
 import { handleEnvelopeItemFileRequest } from '../files/files.helpers';
 import {
   ZDownloadDocumentRequestParamsSchema,
+  ZDownloadDocumentRequestQuerySchema,
   ZDownloadEnvelopeAuditLogPdfRequestParamsSchema,
   ZDownloadEnvelopeCertificatePdfRequestParamsSchema,
   ZDownloadEnvelopeItemRequestParamsSchema,
@@ -91,6 +97,11 @@ export const downloadRoute = new Hono<HonoEnv>()
                     signingStatus: true,
                   },
                 },
+                documentMeta: {
+                  select: {
+                    downloadWindowHours: true,
+                  },
+                },
               },
             },
             documentData: true,
@@ -99,6 +110,26 @@ export const downloadRoute = new Hono<HonoEnv>()
 
         if (!envelopeItem) {
           return c.json({ error: 'Envelope item not found' }, 404);
+        }
+
+        // Download policies apply to API token access as well: past the download
+        // window only ADMIN/SGC keep access, and the original is theirs alone once
+        // a signed copy exists.
+        const downloadPolicy = await getUserDownloadPolicy({
+          userId: apiToken.user.id,
+          teamId: envelopeItem.envelope.teamId,
+          status: envelopeItem.envelope.status,
+          completedAt: envelopeItem.envelope.completedAt,
+          downloadWindowHours: envelopeItem.envelope.documentMeta?.downloadWindowHours,
+        });
+
+        const downloadDenial = getEnvelopeItemDownloadDenial({
+          version,
+          policy: downloadPolicy,
+        });
+
+        if (downloadDenial) {
+          return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
         }
 
         if (!envelopeItem.documentData) {
@@ -319,66 +350,92 @@ export const downloadRoute = new Hono<HonoEnv>()
    * Download a document by its ID.
    * Requires API key authentication via Authorization header.
    */
-  .get('/document/:documentId/download', sValidator('param', ZDownloadDocumentRequestParamsSchema), async (c) => {
-    const logger = c.get('logger');
+  .get(
+    '/document/:documentId/download',
+    sValidator('param', ZDownloadDocumentRequestParamsSchema),
+    sValidator('query', ZDownloadDocumentRequestQuerySchema),
+    async (c) => {
+      const logger = c.get('logger');
 
-    try {
-      const { documentId, version } = c.req.valid('param');
+      try {
+        const { documentId } = c.req.valid('param');
+        const { version } = c.req.valid('query');
 
-      const apiToken = await resolveApiToken(c.req.header('authorization'));
+        const apiToken = await resolveApiToken(c.req.header('authorization'));
 
-      logger.info({
-        auth: 'api',
-        source: 'apiV2',
-        path: c.req.path,
-        userId: apiToken.user.id,
-        apiTokenId: apiToken.id,
-        documentId,
-        version,
-      });
+        logger.info({
+          auth: 'api',
+          source: 'apiV2',
+          path: c.req.path,
+          userId: apiToken.user.id,
+          apiTokenId: apiToken.id,
+          documentId,
+          version,
+        });
 
-      const envelope = await getEnvelopeById({
-        id: {
-          type: 'documentId',
-          id: documentId,
-        },
-        type: EnvelopeType.DOCUMENT,
-        userId: apiToken.user.id,
-        teamId: apiToken.teamId,
-      }).catch(() => null);
+        const envelope = await getEnvelopeById({
+          id: {
+            type: 'documentId',
+            id: documentId,
+          },
+          type: EnvelopeType.DOCUMENT,
+          userId: apiToken.user.id,
+          teamId: apiToken.teamId,
+        }).catch(() => null);
 
-      if (!envelope) {
-        return c.json({ error: 'Document not found' }, 404);
+        if (!envelope) {
+          return c.json({ error: 'Document not found' }, 404);
+        }
+
+        // Get the first envelope item (documents have exactly one)
+        const [envelopeItem] = envelope.envelopeItems;
+
+        if (!envelopeItem) {
+          return c.json({ error: 'Document item not found' }, 404);
+        }
+
+        // Download policies apply to API token access as well: past the download
+        // window only ADMIN/SGC keep access, and the original is theirs alone once
+        // a signed copy exists.
+        const downloadPolicy = await getUserDownloadPolicy({
+          userId: apiToken.user.id,
+          teamId: envelope.teamId,
+          status: envelope.status,
+          completedAt: envelope.completedAt,
+          downloadWindowHours: envelope.documentMeta.downloadWindowHours,
+        });
+
+        const downloadDenial = getEnvelopeItemDownloadDenial({
+          version,
+          policy: downloadPolicy,
+        });
+
+        if (downloadDenial) {
+          return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[downloadDenial], code: downloadDenial }, 403);
+        }
+
+        if (!envelopeItem.documentData) {
+          return c.json({ error: 'Document data not found' }, 404);
+        }
+
+        return await handleEnvelopeItemFileRequest({
+          title: envelopeItem.title,
+          status: envelope.status,
+          documentData: envelopeItem.documentData,
+          version,
+          isDownload: true,
+          context: c,
+        });
+      } catch (error) {
+        logger.error(error);
+
+        if (error instanceof AppError) {
+          const { status, body } = AppError.toRestAPIError(error);
+
+          return c.json({ error: body.message, code: error.code }, status);
+        }
+
+        return c.json({ error: 'Internal server error' }, 500);
       }
-
-      // Get the first envelope item (documents have exactly one)
-      const [envelopeItem] = envelope.envelopeItems;
-
-      if (!envelopeItem) {
-        return c.json({ error: 'Document item not found' }, 404);
-      }
-
-      if (!envelopeItem.documentData) {
-        return c.json({ error: 'Document data not found' }, 404);
-      }
-
-      return await handleEnvelopeItemFileRequest({
-        title: envelopeItem.title,
-        status: envelope.status,
-        documentData: envelopeItem.documentData,
-        version: version || 'signed',
-        isDownload: true,
-        context: c,
-      });
-    } catch (error) {
-      logger.error(error);
-
-      if (error instanceof AppError) {
-        const { status, body } = AppError.toRestAPIError(error);
-
-        return c.json({ error: body.message, code: error.code }, status);
-      }
-
-      return c.json({ error: 'Internal server error' }, 500);
-    }
-  });
+    },
+  );

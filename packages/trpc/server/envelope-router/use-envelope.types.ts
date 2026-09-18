@@ -12,6 +12,7 @@ import {
   ZDocumentMetaTimezoneSchema,
   ZDocumentMetaTypedSignatureEnabledSchema,
   ZDocumentMetaUploadSignatureEnabledSchema,
+  ZDownloadWindowHoursSchema,
 } from '@documenso/lib/types/document-meta';
 import { ZEnvelopeAttachmentTypeSchema } from '@documenso/lib/types/envelope-attachment';
 import { ZFieldMetaPrefillFieldsSchema } from '@documenso/lib/types/field-meta';
@@ -96,6 +97,7 @@ export const ZUseEnvelopePayloadSchema = z.object({
       drawSignatureEnabled: ZDocumentMetaDrawSignatureEnabledSchema.optional(),
       allowDictateNextSigner: z.boolean().optional(),
       envelopeExpirationPeriod: ZEnvelopeExpirationPeriod.nullish(),
+      downloadWindowHours: ZDownloadWindowHoursSchema.nullish(),
     })
     .describe('Override values from the template for the created document.')
     .optional(),

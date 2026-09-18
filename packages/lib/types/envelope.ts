@@ -55,6 +55,7 @@ export const ZEnvelopeSchema = EnvelopeSchema.pick({
     emailId: true,
     emailReplyTo: true,
     envelopeExpirationPeriod: true,
+    downloadWindowHours: true,
   }),
   recipients: ZEnvelopeRecipientLiteSchema.array(),
   fields: ZEnvelopeFieldSchema.array(),

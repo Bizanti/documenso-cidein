@@ -565,47 +565,35 @@ test.describe('Find Documents API - Team Context', () => {
     const member = await seedTeamMember({ teamId: team.id, role: TeamMemberRole.ADMIN });
     const { user: outsideUser, team: outsideTeam } = await seedUser();
 
-    // Team docs
-    await seedDocuments([
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [outsideUser],
-        type: DocumentStatus.PENDING,
-        documentOptions: { title: 'Team Doc 1' },
-      },
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.DRAFT,
-        documentOptions: { title: 'Team Doc 2' },
-      },
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [outsideUser],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: { title: 'Team Doc 3' },
-      },
+    // Team docs.
+    //
+    // Seeded with the individual helpers so the inserts are awaited before the request
+    // below — `seedDocuments` resolves before its inserts complete.
+    await Promise.all([
+      seedPendingDocument(owner, team.id, [outsideUser], {
+        key: 0,
+        createDocumentOptions: { title: 'Team Doc 1' },
+      }),
+      seedDraftDocument(owner, team.id, [], {
+        key: 1,
+        createDocumentOptions: { title: 'Team Doc 2' },
+      }),
+      seedCompletedDocument(owner, team.id, [outsideUser], {
+        key: 2,
+        createDocumentOptions: { title: 'Team Doc 3' },
+      }),
     ]);
 
     // Non-team docs (noise - should NOT appear)
-    await seedDocuments([
-      {
-        sender: outsideUser,
-        teamId: outsideTeam.id,
-        recipients: [],
-        type: DocumentStatus.DRAFT,
-        documentOptions: { title: 'Outside Draft' },
-      },
-      {
-        sender: outsideUser,
-        teamId: outsideTeam.id,
-        recipients: [member],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: { title: 'Outside Completed with Member as Recipient' },
-      },
+    await Promise.all([
+      seedDraftDocument(outsideUser, outsideTeam.id, [], {
+        key: 0,
+        createDocumentOptions: { title: 'Outside Draft' },
+      }),
+      seedCompletedDocument(outsideUser, outsideTeam.id, [member], {
+        key: 1,
+        createDocumentOptions: { title: 'Outside Completed with Member as Recipient' },
+      }),
     ]);
 
     const { token: memberToken } = await createApiToken({
@@ -726,56 +714,41 @@ test.describe('Find Documents API - Team Context', () => {
     const admin = await seedTeamMember({ teamId: team.id, role: TeamMemberRole.ADMIN });
     const manager = await seedTeamMember({ teamId: team.id, role: TeamMemberRole.MANAGER });
 
-    // Seed 2 docs per visibility level (6 total)
-    await seedDocuments([
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: { title: 'Everyone Doc 1', visibility: DocumentVisibility.EVERYONE },
-      },
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: { title: 'Everyone Doc 2', visibility: DocumentVisibility.EVERYONE },
-      },
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: {
+    // Seed 2 docs per visibility level (6 total).
+    //
+    // Seeded with the individual helpers so the inserts are awaited before the request
+    // below — `seedDocuments` resolves before its inserts complete.
+    await Promise.all([
+      seedCompletedDocument(owner, team.id, [], {
+        key: 0,
+        createDocumentOptions: { title: 'Everyone Doc 1', visibility: DocumentVisibility.EVERYONE },
+      }),
+      seedCompletedDocument(owner, team.id, [], {
+        key: 1,
+        createDocumentOptions: { title: 'Everyone Doc 2', visibility: DocumentVisibility.EVERYONE },
+      }),
+      seedCompletedDocument(owner, team.id, [], {
+        key: 2,
+        createDocumentOptions: {
           title: 'Manager Doc 1',
           visibility: DocumentVisibility.MANAGER_AND_ABOVE,
         },
-      },
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: {
+      }),
+      seedCompletedDocument(owner, team.id, [], {
+        key: 3,
+        createDocumentOptions: {
           title: 'Manager Doc 2',
           visibility: DocumentVisibility.MANAGER_AND_ABOVE,
         },
-      },
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: { title: 'Admin Doc 1', visibility: DocumentVisibility.ADMIN },
-      },
-      {
-        sender: owner,
-        teamId: team.id,
-        recipients: [],
-        type: DocumentStatus.COMPLETED,
-        documentOptions: { title: 'Admin Doc 2', visibility: DocumentVisibility.ADMIN },
-      },
+      }),
+      seedCompletedDocument(owner, team.id, [], {
+        key: 4,
+        createDocumentOptions: { title: 'Admin Doc 1', visibility: DocumentVisibility.ADMIN },
+      }),
+      seedCompletedDocument(owner, team.id, [], {
+        key: 5,
+        createDocumentOptions: { title: 'Admin Doc 2', visibility: DocumentVisibility.ADMIN },
+      }),
     ]);
 
     // Admin sees all 6

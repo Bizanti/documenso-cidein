@@ -8,6 +8,11 @@ import '@documenso/lib/constants/time-zones';
 import { DEFAULT_DOCUMENT_TIME_ZONE, TIME_ZONES } from '@documenso/lib/constants/time-zones';
 import { AppError } from '@documenso/lib/errors/app-error';
 import { deleteDocument } from '@documenso/lib/server-only/document/delete-document';
+import {
+  DOWNLOAD_DENIAL_MESSAGE,
+  getEnvelopeItemDownloadDenial,
+  getUserDownloadPolicy,
+} from '@documenso/lib/server-only/document/download-policy';
 import { findDocuments } from '@documenso/lib/server-only/document/find-documents';
 import { resendDocument } from '@documenso/lib/server-only/document/resend-document';
 import { sendDocument } from '@documenso/lib/server-only/document/send-document';
@@ -217,6 +222,32 @@ export const ApiContractV1Implementation = tsr.router(ApiContractV1, {
           status: 404,
           body: {
             message: 'Document not found',
+          },
+        };
+      }
+
+      // Download policies apply to API token access as well: past the download
+      // window only ADMIN/SGC keep access, and the original is theirs alone once
+      // a signed copy exists.
+      const downloadPolicy = await getUserDownloadPolicy({
+        userId: user.id,
+        teamId: team.id,
+        status: envelope.status,
+        completedAt: envelope.completedAt,
+        downloadWindowHours: envelope.documentMeta.downloadWindowHours,
+      });
+
+      const downloadDenial = getEnvelopeItemDownloadDenial({
+        version: downloadOriginalDocument ? 'original' : 'signed',
+        policy: downloadPolicy,
+      });
+
+      if (downloadDenial) {
+        return {
+          status: 403,
+          body: {
+            message: DOWNLOAD_DENIAL_MESSAGE[downloadDenial],
+            code: downloadDenial,
           },
         };
       }

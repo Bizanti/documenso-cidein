@@ -21,6 +21,8 @@ import { match } from 'ts-pattern';
 import { DocumentStatus } from '~/components/general/document/document-status';
 import { useCurrentTeam } from '~/providers/team';
 
+import { getEnvelopeDownloadPolicyRequests } from '../dialogs/envelope-download-policy';
+import { EnvelopeDownloadPolicyProvider } from '../dialogs/envelope-download-policy-provider';
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
 import { DocumentsTableActionButton } from './documents-table-action-button';
 import { DocumentsTableActionDropdown } from './documents-table-action-dropdown';
@@ -47,6 +49,8 @@ export const DocumentsTable = ({
   onRowSelectionChange,
 }: DocumentsTableProps) => {
   const { _, i18n } = useLingui();
+
+  const { user } = useSession();
 
   const team = useCurrentTeam();
   const [isPending, startTransition] = useTransition();
@@ -143,58 +147,70 @@ export const DocumentsTable = ({
     totalPages: 1,
   };
 
+  const downloadPolicyRequests = useMemo(
+    () =>
+      getEnvelopeDownloadPolicyRequests({
+        envelopes: results.data,
+        userEmail: user.email,
+        teamEmail: team.teamEmail?.email,
+      }),
+    [results.data, team.teamEmail?.email, user.email],
+  );
+
   return (
     <div className="relative">
-      <DataTable
-        columns={columns}
-        data={results.data}
-        perPage={results.perPage}
-        currentPage={results.currentPage}
-        totalPages={results.totalPages}
-        onPaginationChange={onPaginationChange}
-        columnVisibility={{
-          sender: team !== undefined,
-        }}
-        error={{
-          enable: isLoadingError || false,
-        }}
-        skeleton={{
-          enable: isLoading || false,
-          rows: 5,
-          component: (
-            <>
-              {enableSelection && (
+      <EnvelopeDownloadPolicyProvider requests={downloadPolicyRequests}>
+        <DataTable
+          columns={columns}
+          data={results.data}
+          perPage={results.perPage}
+          currentPage={results.currentPage}
+          totalPages={results.totalPages}
+          onPaginationChange={onPaginationChange}
+          columnVisibility={{
+            sender: team !== undefined,
+          }}
+          error={{
+            enable: isLoadingError || false,
+          }}
+          skeleton={{
+            enable: isLoading || false,
+            rows: 5,
+            component: (
+              <>
+                {enableSelection && (
+                  <TableCell>
+                    <Skeleton className="h-4 w-4 rounded" />
+                  </TableCell>
+                )}
                 <TableCell>
-                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 w-40 rounded-full" />
                 </TableCell>
-              )}
-              <TableCell>
-                <Skeleton className="h-4 w-40 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-20 rounded-full" />
-              </TableCell>
-              <TableCell className="py-4">
-                <div className="flex w-full flex-row items-center">
-                  <Skeleton className="h-10 w-10 flex-shrink-0 rounded-full" />
-                </div>
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-20 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-10 w-24 rounded" />
-              </TableCell>
-            </>
-          ),
-        }}
-        enableRowSelection={enableSelection}
-        rowSelection={rowSelection}
-        onRowSelectionChange={onRowSelectionChange}
-        getRowId={(row) => row.envelopeId}
-      >
-        {(table) => <DataTablePagination additionalInformation="VisibleCount" table={table} />}
-      </DataTable>
+                <TableCell>
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                </TableCell>
+                <TableCell className="py-4">
+                  <div className="flex w-full flex-row items-center">
+                    <Skeleton className="h-10 w-10 flex-shrink-0 rounded-full" />
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-20 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-10 w-24 rounded" />
+                </TableCell>
+              </>
+            ),
+          }}
+          enableRowSelection={enableSelection}
+          rowSelection={rowSelection}
+          onRowSelectionChange={onRowSelectionChange}
+          getRowId={(row) => row.envelopeId}
+        >
+          {(table) => <DataTablePagination additionalInformation="VisibleCount" table={table} />}
+        </DataTable>
+      </EnvelopeDownloadPolicyProvider>
 
       {isPending && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/50">

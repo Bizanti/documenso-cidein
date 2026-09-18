@@ -3,7 +3,7 @@ import type { TEnvelope } from '@documenso/lib/types/envelope';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { getEnvelopeItemPermissions, mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
-import { formatDocumentsPath } from '@documenso/lib/utils/teams';
+import { formatDocumentsPath, hasSgcDownloadPrivileges } from '@documenso/lib/utils/teams';
 import { trpc as trpcReact } from '@documenso/trpc/react';
 import { DocumentShareButton } from '@documenso/ui/components/document/document-share-button';
 import {
@@ -22,6 +22,7 @@ import {
   FileOutputIcon,
   History,
   Loader,
+  LockIcon,
   MoreHorizontal,
   Pencil,
   ScrollTextIcon,
@@ -31,8 +32,10 @@ import {
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
+import { DocumentResendSignedDialog } from '~/components/dialogs/document-resend-signed-dialog';
 import { EnvelopeDeleteDialog } from '~/components/dialogs/envelope-delete-dialog';
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
+import { useEnvelopeDownloadPolicy } from '~/components/dialogs/envelope-download-policy';
 import { EnvelopeDuplicateDialog } from '~/components/dialogs/envelope-duplicate-dialog';
 import { EnvelopeRedistributeDialog } from '~/components/dialogs/envelope-redistribute-dialog';
 import { EnvelopeRenameDialog } from '~/components/dialogs/envelope-rename-dialog';
@@ -65,11 +68,27 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
   const isCurrentTeamDocument = team && envelope.teamId === team.id;
   const canManageDocument = Boolean(isOwner || isCurrentTeamDocument);
 
-  // Recipients without download/share capabilities (e.g. controlled signers)
+  // Recipients without download capabilities (e.g. controlled signers)
   // must not be offered actions that the backend will reject.
   const recipientCapabilities = recipient ? getRecipientRoleCapabilities(recipient.role) : null;
   const canDownloadDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canDownload;
-  const canShareDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canShare;
+
+  // Sharing a signing card is an owner/team action, so viewers acting as a
+  // recipient of this document only get it when they can manage the document.
+  const canShareDocument = canManageDocument || !recipientCapabilities;
+
+  // The download window, and the delivery of the signed document, are governed
+  // by the owner and the SGC download privileges (ADMIN/SGC).
+  const canManageSignedDocument = isOwner || hasSgcDownloadPrivileges(team.currentTeamRole);
+
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({
+    envelopeId: envelope.id,
+    token: canManageDocument ? undefined : recipient?.token,
+    enabled: isComplete && canDownloadDocument,
+  });
+
+  const isDownloadLocked =
+    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
 
   const { canTitleBeChanged } = getEnvelopeItemPermissions(envelope, []);
 
@@ -102,18 +121,47 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
           </DropdownMenuItem>
         )}
 
-        {canDownloadDocument && (
-          <EnvelopeDownloadDialog
-            envelopeId={envelope.id}
-            envelopeStatus={envelope.status}
-            isLegacy={envelope.internalVersion === 1}
-            token={canManageDocument ? undefined : recipient?.token}
-            envelopeItems={envelope.envelopeItems}
+        {canDownloadDocument &&
+          (isDownloadLocked ? (
+            <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
+              <div className="flex flex-col">
+                <div className="flex items-center">
+                  <LockIcon className="mr-2 h-4 w-4" />
+                  <Trans>Download</Trans>
+                </div>
+                <span className="pl-6 text-muted-foreground text-xs">
+                  <Trans>The download window has expired</Trans>
+                </span>
+              </div>
+            </DropdownMenuItem>
+          ) : (
+            <EnvelopeDownloadDialog
+              envelopeId={envelope.id}
+              envelopeStatus={envelope.status}
+              isLegacy={envelope.internalVersion === 1}
+              token={canManageDocument ? undefined : recipient?.token}
+              envelopeItems={envelope.envelopeItems}
+              downloadPolicy={downloadPolicy}
+              trigger={
+                <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                  <div>
+                    <Download className="mr-2 h-4 w-4" />
+                    <Trans>Download</Trans>
+                  </div>
+                </DropdownMenuItem>
+              }
+            />
+          ))}
+
+        {envelope.status === DocumentStatus.COMPLETED && canManageSignedDocument && (
+          <DocumentResendSignedDialog
+            documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
+            recipients={envelope.recipients}
             trigger={
               <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-                <div>
-                  <Download className="mr-2 h-4 w-4" />
-                  <Trans>Download</Trans>
+                <div data-testid="document-resend-signed-action">
+                  <History className="mr-2 h-4 w-4" />
+                  <Trans>Resend Signed Document</Trans>
                 </div>
               </DropdownMenuItem>
             }
@@ -198,7 +246,6 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
         {canShareDocument && (
           <DocumentShareButton
             documentId={mapSecondaryIdToDocumentId(envelope.secondaryId)}
-            token={canManageDocument ? undefined : recipient?.token}
             trigger={({ loading, disabled }) => (
               <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
                 <div className="flex items-center">
