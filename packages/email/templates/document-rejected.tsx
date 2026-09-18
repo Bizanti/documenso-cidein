@@ -3,6 +3,7 @@ import { useLingui } from '@lingui/react';
 
 import { Body, Container, Head, Html, Preview, Section } from '../components';
 import { TemplateBrandingLogo } from '../template-components/template-branding-logo';
+import { TemplateCustomMessageBody } from '../template-components/template-custom-message-body';
 import { TemplateDocumentRejected } from '../template-components/template-document-rejected';
 import { TemplateFooter } from '../template-components/template-footer';
 
@@ -12,6 +13,7 @@ type DocumentRejectedEmailProps = {
   documentUrl: string;
   rejectionReason: string;
   assetBaseUrl?: string;
+  customBody?: string;
 };
 
 export function DocumentRejectedEmail({
@@ -20,6 +22,7 @@ export function DocumentRejectedEmail({
   documentUrl,
   rejectionReason,
   assetBaseUrl = 'http://localhost:3002',
+  customBody,
 }: DocumentRejectedEmailProps) {
   const { _ } = useLingui();
 
@@ -37,12 +40,16 @@ export function DocumentRejectedEmail({
             <Section>
               <TemplateBrandingLogo assetBaseUrl={assetBaseUrl} className="mb-4 h-6" />
 
-              <TemplateDocumentRejected
-                recipientName={recipientName}
-                documentName={documentName}
-                documentUrl={documentUrl}
-                rejectionReason={rejectionReason}
-              />
+              {customBody ? (
+                <TemplateCustomMessageBody text={customBody} />
+              ) : (
+                <TemplateDocumentRejected
+                  recipientName={recipientName}
+                  documentName={documentName}
+                  documentUrl={documentUrl}
+                  rejectionReason={rejectionReason}
+                />
+              )}
             </Section>
           </Container>
 

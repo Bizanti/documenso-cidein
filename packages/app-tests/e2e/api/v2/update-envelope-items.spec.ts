@@ -3,7 +3,7 @@ import path from 'node:path';
 import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
 import { createApiToken } from '@documenso/lib/server-only/public-api/create-api-token';
 import { prisma } from '@documenso/prisma';
-import { DocumentStatus, EnvelopeType, FieldType, RecipientRole } from '@documenso/prisma/client';
+import { DocumentStatus, EnvelopeType, FieldType, RecipientRole, SendStatus } from '@documenso/prisma/client';
 import { seedUser } from '@documenso/prisma/seed/users';
 import type {
   TCreateEnvelopePayload,
@@ -122,6 +122,22 @@ const distributeEnvelope = async (request: APIRequestContext, authToken: string,
   });
 
   expect(distributeRes.ok()).toBeTruthy();
+
+  // `sendDocument` only queues the signing request emails, so the recipient is
+  // marked as sent asynchronously by the email job. Pin the sent state directly
+  // via the database, so the envelope item assertions below do not race the job:
+  // permissions treat a PENDING envelope as active (order changes blocked) only
+  // once a recipient has been sent.
+  await prisma.recipient.updateMany({
+    where: {
+      envelopeId,
+      sendStatus: SendStatus.NOT_SENT,
+    },
+    data: {
+      sendStatus: SendStatus.SENT,
+      sentAt: new Date(),
+    },
+  });
 };
 
 const updateEnvelopeItems = async (

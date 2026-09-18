@@ -1,19 +1,13 @@
 import { kyselyPrisma, prisma, sql } from '@documenso/prisma';
 import type { DB } from '@documenso/prisma/generated/types';
 import { ExtendedDocumentStatus } from '@documenso/prisma/types/extended-document-status';
-import type { DocumentSource, Envelope, Team, TeamEmail } from '@prisma/client';
-import {
-  DocumentStatus,
-  DocumentVisibility,
-  EnvelopeType,
-  RecipientRole,
-  SigningStatus,
-  TeamMemberRole,
-} from '@prisma/client';
+import type { DocumentSource, Envelope, Team, TeamEmail, TeamMemberRole } from '@prisma/client';
+import { DocumentStatus, EnvelopeType, RecipientRole, SigningStatus } from '@prisma/client';
 import type { Expression, ExpressionBuilder, SelectQueryBuilder, SqlBool } from 'kysely';
 import { DateTime } from 'luxon';
 import { match } from 'ts-pattern';
 
+import { TEAM_DOCUMENT_VISIBILITY_MAP } from '../../constants/teams';
 import type { FindResultResponse } from '../../types/search-params';
 import { maskRecipientTokensForDocument } from '../../utils/mask-recipient-tokens-for-document';
 import { hasExpiredRecipient } from '../envelope/query-helpers';
@@ -337,14 +331,9 @@ export const findDocuments = async ({
   ): EnvelopeQueryBuilder | null => {
     const teamEmail = teamData.teamEmail?.email ?? null;
 
-    const allowedVisibilities = match(teamData.currentTeamRole)
-      .with(TeamMemberRole.ADMIN, () => [
-        DocumentVisibility.EVERYONE,
-        DocumentVisibility.MANAGER_AND_ABOVE,
-        DocumentVisibility.ADMIN,
-      ])
-      .with(TeamMemberRole.MANAGER, () => [DocumentVisibility.EVERYONE, DocumentVisibility.MANAGER_AND_ABOVE])
-      .otherwise(() => [DocumentVisibility.EVERYONE]);
+    // Visibility a team role may see. Keyed on TEAM_DOCUMENT_VISIBILITY_MAP so
+    // roles such as SGC cannot drift out of sync with the rest of the app.
+    const allowedVisibilities = TEAM_DOCUMENT_VISIBILITY_MAP[teamData.currentTeamRole];
 
     // Visibility: meets role threshold OR directly involved
     const visibilityFilter = (eb: EnvelopeExpressionBuilder) =>

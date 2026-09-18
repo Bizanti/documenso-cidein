@@ -106,11 +106,12 @@ test.describe('Controlled signer file access', () => {
     const downloadRes = await request.get(downloadUrl(controlledRecipient.token, envelopeItem.id, 'signed'));
     expect(downloadRes.status()).toBe(403);
 
-    // The original unsigned document remains accessible.
+    // The original is restricted to ADMIN/SGC once the document is final, and
+    // the controlled signer is blocked from the final document either way.
     const initialRes = await request.get(
       itemPdfUrl(controlledRecipient.token, envelope.id, envelopeItem.id, envelopeItem.documentData.id, 'initial'),
     );
-    expect(initialRes.status()).toBe(200);
+    expect(initialRes.status()).toBe(403);
   });
 
   test('rejects controlled signer access to the final document once rejected', async ({ request }) => {
@@ -143,37 +144,18 @@ test.describe('Controlled signer file access', () => {
   });
 });
 
-test.describe('Controlled signer share links', () => {
-  const callShareDocument = (request: APIRequestContext, input: { documentId: number; token?: string }) => {
+test.describe('Document share links', () => {
+  const callShareDocument = (request: APIRequestContext, input: { documentId: number }) => {
     return request.post(`${WEBAPP_BASE_URL}/api/trpc/document.share`, {
       headers: { 'content-type': 'application/json' },
       data: JSON.stringify({ json: input }),
     });
   };
 
-  test('rejects share link creation with a controlled signer token', async ({ request }) => {
-    const { envelope, controlledRecipient } = await seedDocumentWithControlledSigner();
+  // Sharing a signing card is a team action: recipients lost it in M3 (F4), so the
+  // route is session only and the token based cases are no longer valid.
 
-    const res = await callShareDocument(request, {
-      documentId: mapSecondaryIdToDocumentId(envelope.secondaryId),
-      token: controlledRecipient.token,
-    });
-
-    expect(res.status()).toBe(403);
-  });
-
-  test('allows share link creation with a regular signer token', async ({ request }) => {
-    const { envelope, regularRecipient } = await seedDocumentWithControlledSigner();
-
-    const res = await callShareDocument(request, {
-      documentId: mapSecondaryIdToDocumentId(envelope.secondaryId),
-      token: regularRecipient.token,
-    });
-
-    expect(res.status()).toBe(200);
-  });
-
-  test('allows share link creation for a team member session without a recipient token', async ({ page }) => {
+  test('allows share link creation for a team member session', async ({ page }) => {
     const { owner, envelope } = await seedDocumentWithControlledSigner();
 
     await apiSignin({ page, email: owner.user.email });

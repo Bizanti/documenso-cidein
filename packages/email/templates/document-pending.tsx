@@ -3,15 +3,19 @@ import { useLingui } from '@lingui/react';
 
 import { Body, Container, Head, Html, Preview, Section } from '../components';
 import { TemplateBrandingLogo } from '../template-components/template-branding-logo';
+import { TemplateCustomMessageBody } from '../template-components/template-custom-message-body';
 import type { TemplateDocumentPendingProps } from '../template-components/template-document-pending';
 import { TemplateDocumentPending } from '../template-components/template-document-pending';
 import { TemplateFooter } from '../template-components/template-footer';
 
-export type DocumentPendingEmailTemplateProps = Partial<TemplateDocumentPendingProps>;
+export type DocumentPendingEmailTemplateProps = Partial<TemplateDocumentPendingProps> & {
+  customBody?: string;
+};
 
 export const DocumentPendingEmailTemplate = ({
   documentName = 'Open Source Pledge.pdf',
   assetBaseUrl = 'http://localhost:3002',
+  customBody,
 }: DocumentPendingEmailTemplateProps) => {
   const { _ } = useLingui();
 
@@ -28,7 +32,11 @@ export const DocumentPendingEmailTemplate = ({
             <Section>
               <TemplateBrandingLogo assetBaseUrl={assetBaseUrl} className="mb-4 h-6" />
 
-              <TemplateDocumentPending documentName={documentName} assetBaseUrl={assetBaseUrl} />
+              {customBody ? (
+                <TemplateCustomMessageBody text={customBody} />
+              ) : (
+                <TemplateDocumentPending documentName={documentName} assetBaseUrl={assetBaseUrl} />
+              )}
             </Section>
           </Container>
 

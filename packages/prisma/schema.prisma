@@ -583,6 +583,9 @@ model DocumentMeta {
 
   reminderSettings Json? /// [EnvelopeReminderSettings] @zod.custom.use(ZEnvelopeReminderSettingsSchema)
 
+  /// Optional per-envelope override (in hours) for the signed document download window.
+  downloadWindowHours Int?
+
   envelope Envelope?
 }
 
@@ -944,6 +947,7 @@ enum OrganisationMemberRole {
 
 enum TeamMemberRole {
   ADMIN
+  SGC
   MANAGER
   MEMBER
 }

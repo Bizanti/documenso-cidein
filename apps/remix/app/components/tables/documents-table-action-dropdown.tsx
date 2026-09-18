@@ -7,7 +7,7 @@ import {
   getRecipientRoleCapabilities,
   isSigningRecipientRole,
 } from '@documenso/lib/utils/recipients';
-import { formatDocumentsPath, isMemberManagerOrAbove } from '@documenso/lib/utils/teams';
+import { formatDocumentsPath, hasSgcDownloadPrivileges, isMemberManagerOrAbove } from '@documenso/lib/utils/teams';
 import { trpc as trpcReact } from '@documenso/trpc/react';
 import { DocumentShareButton } from '@documenso/ui/components/document/document-share-button';
 import {
@@ -31,6 +31,7 @@ import {
   FolderInput,
   History,
   Loader,
+  LockIcon,
   MoreHorizontal,
   Pencil,
   Share,
@@ -48,7 +49,9 @@ import { EnvelopeSaveAsTemplateDialog } from '~/components/dialogs/envelope-save
 import { DocumentRecipientLinkCopyDialog } from '~/components/general/document/document-recipient-link-copy-dialog';
 import { useCurrentTeam } from '~/providers/team';
 
+import { DocumentResendSignedDialog } from '../dialogs/document-resend-signed-dialog';
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
+import { useEnvelopeDownloadPolicy } from '../dialogs/envelope-download-policy';
 import { EnvelopeRenameDialog } from '../dialogs/envelope-rename-dialog';
 
 export type DocumentsTableActionDropdownProps = {
@@ -81,18 +84,34 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
   const isCurrentTeamDocument = team && row.team?.url === team.url;
   const canManageDocument = Boolean(isOwner || isCurrentTeamDocument);
 
-  // Recipients without download/share capabilities (e.g. controlled signers)
+  // Recipients without download capabilities (e.g. controlled signers)
   // must not be offered actions that the backend will reject. Team members
   // acting on their own documents keep full access via their session.
   const recipientCapabilities = recipient ? getRecipientRoleCapabilities(recipient.role) : null;
   const canDownloadDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canDownload;
-  const canShareDocument = canManageDocument || !recipientCapabilities || recipientCapabilities.canShare;
+
+  // Sharing a signing card is an owner/team action, so viewers acting as a
+  // recipient of this document only get it when they can manage the document.
+  const canShareDocument = canManageDocument || !recipientCapabilities;
 
   // Cancelling a document is restricted server-side to the document owner or a
   // privileged team member (ADMIN/MANAGER). Mirror that here so plain MEMBERs
   // don't see a Cancel action that would fail on the server.
   const isPrivilegedTeamMember = isMemberManagerOrAbove(team.currentTeamRole);
   const canCancelDocument = isOwner || isPrivilegedTeamMember;
+
+  // The download window, and the delivery of the signed document, are governed
+  // by the owner and the SGC download privileges (ADMIN/SGC).
+  const canManageSignedDocument = isOwner || hasSgcDownloadPrivileges(team.currentTeamRole);
+
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({
+    envelopeId: row.envelopeId,
+    token: canManageDocument ? undefined : recipient?.token,
+    enabled: isComplete && canDownloadDocument,
+  });
+
+  const isDownloadLocked =
+    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
 
   const { canTitleBeChanged } = getEnvelopeItemPermissions(
     {
@@ -162,17 +181,46 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
           </DropdownMenuItem>
         )}
 
-        {canDownloadDocument && (
-          <EnvelopeDownloadDialog
-            envelopeId={row.envelopeId}
-            envelopeStatus={row.status}
-            isLegacy={row.internalVersion === 1}
-            token={canManageDocument ? undefined : recipient?.token}
+        {canDownloadDocument &&
+          (isDownloadLocked ? (
+            <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
+              <div className="flex flex-col">
+                <div className="flex items-center">
+                  <LockIcon className="mr-2 h-4 w-4" />
+                  <Trans>Download</Trans>
+                </div>
+                <span className="pl-6 text-muted-foreground text-xs">
+                  <Trans>The download window has expired</Trans>
+                </span>
+              </div>
+            </DropdownMenuItem>
+          ) : (
+            <EnvelopeDownloadDialog
+              envelopeId={row.envelopeId}
+              envelopeStatus={row.status}
+              isLegacy={row.internalVersion === 1}
+              token={canManageDocument ? undefined : recipient?.token}
+              downloadPolicy={downloadPolicy}
+              trigger={
+                <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                  <div>
+                    <Download className="mr-2 h-4 w-4" />
+                    <Trans>Download</Trans>
+                  </div>
+                </DropdownMenuItem>
+              }
+            />
+          ))}
+
+        {row.status === DocumentStatus.COMPLETED && canManageSignedDocument && (
+          <DocumentResendSignedDialog
+            documentId={row.id}
+            recipients={row.recipients}
             trigger={
               <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-                <div>
-                  <Download className="mr-2 h-4 w-4" />
-                  <Trans>Download</Trans>
+                <div data-testid="document-resend-signed-action">
+                  <History className="mr-2 h-4 w-4" />
+                  <Trans>Resend Signed Document</Trans>
                 </div>
               </DropdownMenuItem>
             }
@@ -279,7 +327,6 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
         {canShareDocument && (
           <DocumentShareButton
             documentId={row.id}
-            token={canManageDocument ? undefined : recipient?.token}
             trigger={({ loading, disabled }) => (
               <DropdownMenuItem disabled={disabled || isDraft} onSelect={(e) => e.preventDefault()}>
                 <div className="flex items-center">

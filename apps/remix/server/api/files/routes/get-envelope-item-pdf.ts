@@ -1,11 +1,17 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
+import {
+  DOWNLOAD_DENIAL_MESSAGE,
+  getEnvelopeItemViewDenial,
+  getUserDownloadPolicy,
+  isFinalDocumentStatus,
+} from '@documenso/lib/server-only/document/download-policy';
 import { verifyEmbeddingPresignToken } from '@documenso/lib/server-only/embedding-presign/verify-embedding-presign-token';
 import type { DocumentDataVersion } from '@documenso/lib/types/document';
 import { sha256 } from '@documenso/lib/universal/crypto';
 import { getFileServerSide } from '@documenso/lib/universal/upload/get-file.server';
 import { prisma } from '@documenso/prisma';
 import { sValidator } from '@hono/standard-validator';
-import type { DocumentData, EnvelopeItem } from '@prisma/client';
+import type { DocumentData, DocumentStatus, EnvelopeItem } from '@prisma/client';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 
@@ -69,6 +75,13 @@ route.get(
             type: true,
             teamId: true,
             templateType: true,
+            status: true,
+            completedAt: true,
+            documentMeta: {
+              select: {
+                downloadWindowHours: true,
+              },
+            },
           },
         },
       },
@@ -90,11 +103,30 @@ route.get(
       return c.json({ error: 'Not found' }, 404);
     }
 
+    // The viewer hands out the same stored bytes as the download routes, so it
+    // answers to the same policy.
+    const downloadPolicy = await getUserDownloadPolicy({
+      userId,
+      teamId: envelopeItem.envelope.teamId,
+      status: envelopeItem.envelope.status,
+      completedAt: envelopeItem.envelope.completedAt,
+      downloadWindowHours: envelopeItem.envelope.documentMeta?.downloadWindowHours,
+    });
+
+    const viewDenial = getEnvelopeItemViewDenial({
+      version,
+      policy: downloadPolicy,
+    });
+
+    if (viewDenial) {
+      return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[viewDenial], code: viewDenial }, 403);
+    }
+
     return await handleEnvelopeItemPdfRequest({
       c,
       envelopeItem,
       version,
-      cacheStrategy: 'private',
+      status: envelopeItem.envelope.status,
     });
   },
 );
@@ -107,20 +139,17 @@ type HandleEnvelopeItemPdfRequestOptions = {
   version: DocumentDataVersion;
 
   /**
-   * The type of cache strategy to use.
-   *
-   * For access via tokens, we can use a public cache to allow the CDN to cache it.
-   *
-   * For access via session, we must use a private cache.
+   * The status of the envelope the item belongs to, which decides how long the
+   * response may be cached.
    */
-  cacheStrategy: 'private' | 'public';
+  status: DocumentStatus;
 };
 
 export const handleEnvelopeItemPdfRequest = async ({
   c,
   envelopeItem,
   version,
-  cacheStrategy,
+  status,
 }: HandleEnvelopeItemPdfRequestOptions) => {
   // Determine which PDF data to use based on version requested.
   const documentDataToUse =
@@ -148,7 +177,18 @@ export const handleEnvelopeItemPdfRequest = async ({
   // Note: Only set these headers on success.
   c.header('Content-Type', 'application/pdf');
   c.header('ETag', etag);
-  c.header('Cache-Control', `${cacheStrategy}, max-age=31536000, immutable`);
+
+  // While the envelope is in flight the item is content addressed by
+  // `documentDataId` and no policy limits who may read it, so the URL can be
+  // cached for as long as it stays valid.
+  //
+  // Once the envelope is final the served version is policy governed: the
+  // original is limited to ADMIN/SGC and the signed copy to the download
+  // window, so no cache may outlive the policy.
+  c.header(
+    'Cache-Control',
+    isFinalDocumentStatus(status) ? 'no-store, private' : 'private, max-age=31536000, immutable',
+  );
 
   return c.body(file);
 };

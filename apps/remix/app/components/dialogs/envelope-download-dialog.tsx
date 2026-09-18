@@ -1,5 +1,6 @@
 import { downloadPDF } from '@documenso/lib/client-only/download-pdf';
 import { trpc } from '@documenso/trpc/react';
+import type { TEnvelopeDownloadPolicy } from '@documenso/trpc/server/document-router/get-envelope-download-policies.types';
 import { Button } from '@documenso/ui/primitives/button';
 import {
   Dialog,
@@ -13,7 +14,7 @@ import { Skeleton } from '@documenso/ui/primitives/skeleton';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { DocumentStatus, type EnvelopeItem } from '@prisma/client';
-import { DownloadIcon, FileTextIcon } from 'lucide-react';
+import { DownloadIcon, FileTextIcon, LockIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 type EnvelopeItemToDownload = Pick<EnvelopeItem, 'id' | 'envelopeId' | 'title' | 'order'>;
@@ -42,6 +43,12 @@ type EnvelopeDownloadDialogProps = {
    * If not provided, it will be assumed that the current user can access the document.
    */
   token?: string;
+
+  /**
+   * The download policy for the current viewer. When omitted the dialog resolves it
+   * on open, which requires a server round trip.
+   */
+  downloadPolicy?: TEnvelopeDownloadPolicy;
   trigger: React.ReactNode;
 };
 
@@ -51,6 +58,7 @@ export const EnvelopeDownloadDialog = ({
   isLegacy,
   envelopeItems: initialEnvelopeItems,
   token,
+  downloadPolicy: initialDownloadPolicy,
   trigger,
 }: EnvelopeDownloadDialogProps) => {
   const { toast } = useToast();
@@ -64,6 +72,29 @@ export const EnvelopeDownloadDialog = ({
 
   const generateDownloadKey = (envelopeItemId: string, version: 'original' | 'signed' | 'pending') =>
     `${envelopeItemId}-${version}`;
+
+  const { data: downloadPolicyPayload, isLoading: isLoadingDownloadPolicy } =
+    trpc.document.getEnvelopeDownloadPolicies.useQuery(
+      {
+        envelopeIds: [envelopeId],
+        token,
+      },
+      {
+        enabled: open && !initialDownloadPolicy,
+      },
+    );
+
+  const downloadPolicy = initialDownloadPolicy ?? downloadPolicyPayload?.data[0];
+
+  const isLoadingPolicy = isLoadingDownloadPolicy && !downloadPolicy;
+  const isPolicyLoaded = !isLoadingPolicy;
+
+  const canDownloadOriginal = downloadPolicy?.canDownloadOriginal ?? false;
+  const canDownloadSigned = downloadPolicy?.canDownloadSigned ?? false;
+  const isDownloadWindowExpired = downloadPolicy?.isDownloadWindowExpired ?? false;
+  const downloadWindowHours = downloadPolicy?.downloadWindowHours ?? null;
+
+  const hasNoDownloadableVersion = !canDownloadOriginal && !canDownloadSigned;
 
   // The dialog shows the original document alongside one of:
   //   - "Signed" (when the envelope is COMPLETED)
@@ -160,7 +191,25 @@ export const EnvelopeDownloadDialog = ({
         </DialogHeader>
 
         <div className="flex w-full flex-col gap-4 overflow-hidden">
-          {isLoadingEnvelopeItems
+          {isPolicyLoaded && !hasNoDownloadableVersion && isDownloadWindowExpired && downloadWindowHours !== null && (
+            <div className="rounded-lg border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
+              <Trans>
+                The download window for this document has expired. Only team administrators and the SGC role can
+                download it.
+              </Trans>
+            </div>
+          )}
+
+          {isPolicyLoaded && hasNoDownloadableVersion && (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3 text-muted-foreground text-xs">
+              <LockIcon className="h-4 w-4 flex-shrink-0" />
+              <Trans>
+                Downloads for this document are locked. Only team administrators and the SGC role can download it.
+              </Trans>
+            </div>
+          )}
+
+          {isLoadingPolicy || isLoadingEnvelopeItems
             ? Array.from({ length: 1 }).map((_, index) => (
                 <div key={index} className="flex items-center gap-2 rounded-lg border border-border bg-card p-4">
                   <Skeleton className="h-10 w-10 flex-shrink-0 rounded-lg" />
@@ -195,20 +244,22 @@ export const EnvelopeDownloadDialog = ({
                   </div>
 
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                      onClick={async () => onDownload(item, 'original')}
-                      loading={isDownloadingState[generateDownloadKey(item.id, 'original')]}
-                    >
-                      {!isDownloadingState[generateDownloadKey(item.id, 'original')] && (
-                        <DownloadIcon className="mr-2 h-4 w-4" />
-                      )}
-                      <Trans context="Original document (adjective)">Original</Trans>
-                    </Button>
+                    {canDownloadOriginal && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={async () => onDownload(item, 'original')}
+                        loading={isDownloadingState[generateDownloadKey(item.id, 'original')]}
+                      >
+                        {!isDownloadingState[generateDownloadKey(item.id, 'original')] && (
+                          <DownloadIcon className="mr-2 h-4 w-4" />
+                        )}
+                        <Trans context="Original document (adjective)">Original</Trans>
+                      </Button>
+                    )}
 
-                    {secondaryDownload && (
+                    {secondaryDownload && canDownloadSigned && (
                       <Button
                         variant="default"
                         size="sm"
@@ -220,6 +271,13 @@ export const EnvelopeDownloadDialog = ({
                           <DownloadIcon className="mr-2 h-4 w-4" />
                         )}
                         {secondaryDownload.label}
+                      </Button>
+                    )}
+
+                    {hasNoDownloadableVersion && (
+                      <Button variant="outline" size="sm" className="text-xs" disabled>
+                        <LockIcon className="mr-2 h-4 w-4" />
+                        <Trans context="Locked download (adjective)">Locked</Trans>
                       </Button>
                     )}
                   </div>

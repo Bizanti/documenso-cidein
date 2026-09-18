@@ -1,8 +1,7 @@
-import { formatDocumentsPath, getHighestTeamRoleInGroup } from '@documenso/lib/utils/teams';
+import { canAccessTeamDocument, formatDocumentsPath, getHighestTeamRoleInGroup } from '@documenso/lib/utils/teams';
 import { prisma } from '@documenso/prisma';
 import type { Prisma } from '@prisma/client';
-import { DocumentStatus, DocumentVisibility, EnvelopeType, TeamMemberRole } from '@prisma/client';
-import { match } from 'ts-pattern';
+import { DocumentStatus, EnvelopeType } from '@prisma/client';
 
 import { mapSecondaryIdToDocumentId } from '../../utils/envelope';
 import { getUserTeamGroups } from '../team/get-user-team-groups';
@@ -115,14 +114,7 @@ export const searchDocumentsWithKeyword = async ({ query, userId, limit = 20 }: 
         return false;
       }
 
-      return match([envelope.visibility, teamMemberRole])
-        .with([DocumentVisibility.EVERYONE, TeamMemberRole.ADMIN], () => true)
-        .with([DocumentVisibility.EVERYONE, TeamMemberRole.MANAGER], () => true)
-        .with([DocumentVisibility.EVERYONE, TeamMemberRole.MEMBER], () => true)
-        .with([DocumentVisibility.MANAGER_AND_ABOVE, TeamMemberRole.ADMIN], () => true)
-        .with([DocumentVisibility.MANAGER_AND_ABOVE, TeamMemberRole.MANAGER], () => true)
-        .with([DocumentVisibility.ADMIN, TeamMemberRole.ADMIN], () => true)
-        .otherwise(() => false);
+      return canAccessTeamDocument(teamMemberRole, envelope.visibility);
     })
     .slice(0, limit)
     .map((envelope) => {

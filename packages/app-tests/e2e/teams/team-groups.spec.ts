@@ -31,8 +31,8 @@ const callTeamGroupMutation = (
   });
 
 /**
- * Every team is created with three system-managed INTERNAL_TEAM groups
- * (admin/manager/member). They are the backbone of team-specific access and,
+ * Every team is created with four system-managed INTERNAL_TEAM groups
+ * (admin/sgc/manager/member). They are the backbone of team-specific access and,
  * like organisation internal groups, must not be deletable - deleting them
  * silently strips team members of access while leaving the team row in place.
  */
@@ -53,8 +53,8 @@ test('[TEAMS]: internal team groups cannot be deleted via the API', async ({ pag
     },
   });
 
-  // admin + manager + member.
-  expect(internalTeamGroups).toHaveLength(3);
+  // admin + sgc + manager + member.
+  expect(internalTeamGroups).toHaveLength(4);
 
   for (const group of internalTeamGroups) {
     const response = await callTeamGroupMutation(page, 'team.group.delete', team.id, {
@@ -73,7 +73,7 @@ test('[TEAMS]: internal team groups cannot be deleted via the API', async ({ pag
     },
   });
 
-  expect(remaining).toBe(3);
+  expect(remaining).toBe(4);
 
   // The direct member therefore keeps their team access.
   const memberStillHasAccess = await prisma.teamGroup.findFirst({
