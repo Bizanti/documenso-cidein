@@ -22,7 +22,8 @@ import { plural } from '@lingui/core/macro';
 import { Plural, Trans, useLingui } from '@lingui/react/macro';
 import { DocumentStatus } from '@prisma/client';
 import type * as DialogPrimitive from '@radix-ui/react-dialog';
-import { useEffect, useRef, useState } from 'react';
+import { LockIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { match } from 'ts-pattern';
 
 /**
@@ -78,6 +79,47 @@ export const EnvelopesBulkDownloadDialog = ({
 
   const isOverDownloadLimit = envelopes.length > MAX_BULK_DOWNLOAD_ENVELOPES;
 
+  /**
+   * The download policy of every selected document, resolved in a single request
+   * so the dialog can tell the viewer which ones the download window blocks
+   * instead of failing halfway through the zip with a generic error.
+   */
+  const { data: downloadPoliciesPayload, isLoading: isLoadingDownloadPolicies } =
+    trpc.document.getEnvelopeDownloadPolicies.useQuery(
+      {
+        envelopeIds: envelopes.slice(0, MAX_BULK_DOWNLOAD_ENVELOPES).map((envelope) => envelope.id),
+      },
+      {
+        enabled: open && envelopes.length > 0 && !isOverDownloadLimit,
+      },
+    );
+
+  const downloadPoliciesById = useMemo(
+    () => new Map((downloadPoliciesPayload?.data ?? []).map((policy) => [policy.envelopeId, policy])),
+    [downloadPoliciesPayload],
+  );
+
+  /**
+   * Whether every downloadable version of a document is out of reach for the
+   * current viewer, which is what the download window expiring does to the
+   * signed and the original version of a completed document.
+   *
+   * Documents the batch has not resolved yet are treated as downloadable so the
+   * dialog keeps its previous behaviour when the policy is unavailable.
+   */
+  const isEnvelopeDownloadLocked = (envelope: EnvelopeBulkDownloadItem): boolean => {
+    const policy = downloadPoliciesById.get(envelope.id);
+
+    if (!policy) {
+      return false;
+    }
+
+    return !policy.canDownloadSigned && !policy.canDownloadOriginal;
+  };
+
+  const lockedEnvelopes = envelopes.filter((envelope) => isEnvelopeDownloadLocked(envelope));
+  const downloadableEnvelopes = envelopes.filter((envelope) => !isEnvelopeDownloadLocked(envelope));
+
   useEffect(() => {
     if (!open) {
       return;
@@ -87,8 +129,20 @@ export const EnvelopesBulkDownloadDialog = ({
     setProgress(0);
   }, [open]);
 
-  const getDownloadVersion = (envelope: EnvelopeBulkDownloadItem): BulkDownloadVersion =>
-    versionMap[envelope.id] ?? getDefaultVersion(envelope);
+  /**
+   * The version to download for an envelope: the one the viewer selected, or the
+   * first version the policy still allows when that selection is no longer valid.
+   */
+  const getDownloadVersion = (envelope: EnvelopeBulkDownloadItem): BulkDownloadVersion => {
+    const selectedVersion = versionMap[envelope.id];
+    const versionOptions = getVersionOptions(envelope);
+
+    if (selectedVersion && (!versionOptions || versionOptions.some((option) => option.value === selectedVersion))) {
+      return selectedVersion;
+    }
+
+    return versionOptions?.[0]?.value ?? getDefaultVersion(envelope);
+  };
 
   /**
    * The version options selectable for an envelope, mirroring the gating used
@@ -97,25 +151,43 @@ export const EnvelopesBulkDownloadDialog = ({
    *   - PENDING (non-legacy): partial or original. Legacy envelopes use a
    *     field-rendering pipeline the partial PDF helper does not implement.
    *   - Anything else: original only, so no choice is shown.
+   *
+   * The download policy of the envelope filters the list further, since a
+   * version the server would reject must not be offered: on a completed document
+   * the original is limited to ADMIN/SGC even while the window is open.
    */
   const getVersionOptions = (
     envelope: EnvelopeBulkDownloadItem,
   ): { value: BulkDownloadVersion; label: string }[] | null => {
+    let versionOptions: { value: BulkDownloadVersion; label: string }[];
+
     if (envelope.status === DocumentStatus.COMPLETED) {
-      return [
+      versionOptions = [
         { value: 'signed', label: t({ message: 'Signed', context: 'Signed document (adjective)' }) },
         { value: 'original', label: t({ message: 'Original', context: 'Original document (adjective)' }) },
       ];
-    }
-
-    if (envelope.status === DocumentStatus.PENDING && !envelope.isLegacy) {
-      return [
+    } else if (envelope.status === DocumentStatus.PENDING && !envelope.isLegacy) {
+      versionOptions = [
         { value: 'pending', label: t({ message: 'Partial', context: 'Partially signed document (adjective)' }) },
         { value: 'original', label: t({ message: 'Original', context: 'Original document (adjective)' }) },
       ];
+    } else {
+      return null;
     }
 
-    return null;
+    const downloadPolicy = downloadPoliciesById.get(envelope.id);
+
+    // Until the batch resolves the policy, keep every version selectable so the
+    // dialog behaves as it did before the policy was known.
+    if (!downloadPolicy) {
+      return versionOptions;
+    }
+
+    const availableVersionOptions = versionOptions.filter((option) =>
+      option.value === 'original' ? downloadPolicy.canDownloadOriginal : downloadPolicy.canDownloadSigned,
+    );
+
+    return availableVersionOptions.length > 0 ? availableVersionOptions : null;
   };
 
   const getStatusLabel = (status: DocumentStatus) =>
@@ -128,7 +200,7 @@ export const EnvelopesBulkDownloadDialog = ({
       .exhaustive();
 
   const onDownload = async () => {
-    if (envelopes.length === 0 || isOverDownloadLimit || isDownloading) {
+    if (downloadableEnvelopes.length === 0 || isOverDownloadLimit || isDownloading) {
       return;
     }
 
@@ -142,7 +214,7 @@ export const EnvelopesBulkDownloadDialog = ({
     let failedDownloads = 0;
 
     try {
-      for (const envelope of envelopes) {
+      for (const envelope of downloadableEnvelopes) {
         if (abortRef.current) {
           break;
         }
@@ -231,16 +303,39 @@ export const EnvelopesBulkDownloadDialog = ({
         return;
       }
 
-      if (failedDownloads > 0) {
-        toast({
-          title: t`Documents partially downloaded`,
-          description: t`${plural(successfulEnvelopeIds.length, {
+      // Documents blocked by the download window are left out of the zip instead
+      // of failing, so they are reported separately from failures.
+      const skippedDownloads = envelopes.length - downloadableEnvelopes.length;
+
+      if (failedDownloads > 0 || skippedDownloads > 0) {
+        const descriptionParts = [
+          plural(successfulEnvelopeIds.length, {
             one: '# document downloaded.',
             other: '# documents downloaded.',
-          })} ${plural(failedDownloads, {
-            one: '# document could not be downloaded.',
-            other: '# documents could not be downloaded.',
-          })}`,
+          }),
+        ];
+
+        if (failedDownloads > 0) {
+          descriptionParts.push(
+            plural(failedDownloads, {
+              one: '# document could not be downloaded.',
+              other: '# documents could not be downloaded.',
+            }),
+          );
+        }
+
+        if (skippedDownloads > 0) {
+          descriptionParts.push(
+            plural(skippedDownloads, {
+              one: '# document was skipped because its download window has expired.',
+              other: '# documents were skipped because their download window has expired.',
+            }),
+          );
+        }
+
+        toast({
+          title: t`Documents partially downloaded`,
+          description: descriptionParts.join(' '),
           variant: 'destructive',
         });
         onSuccess?.(successfulEnvelopeIds);
@@ -299,11 +394,27 @@ export const EnvelopesBulkDownloadDialog = ({
           </Alert>
         )}
 
+        {lockedEnvelopes.length > 0 && (
+          <Alert variant="warning" data-testid="bulk-download-locked-alert">
+            <AlertDescription>
+              <Plural
+                value={lockedEnvelopes.length}
+                one="The download window of # document has expired, so it will be left out of the download. Only team administrators and the SGC role can download it."
+                other="The download window of # documents has expired, so they will be left out of the download. Only team administrators and the SGC role can download them."
+              />
+            </AlertDescription>
+          </Alert>
+        )}
+
         <fieldset disabled={isDownloading} className="space-y-4">
           <div className="-mx-3 max-h-96 overflow-y-auto px-3">
             <div className="divide-y divide-border rounded-lg border border-border">
               {envelopes.map((envelope) => {
                 const versionOptions = getVersionOptions(envelope);
+
+                // Documents the download window has closed are shown as blocked
+                // instead of offering a version the download would reject.
+                const isDownloadLocked = isEnvelopeDownloadLocked(envelope);
 
                 return (
                   <div key={envelope.id} className="flex items-center gap-3 px-3 py-2.5">
@@ -314,24 +425,35 @@ export const EnvelopesBulkDownloadDialog = ({
                       <p className="text-muted-foreground text-xs">{getStatusLabel(envelope.status)}</p>
                     </div>
 
-                    {versionOptions && (
-                      <RadioGroupSegmented
-                        className="shrink-0"
-                        value={getDownloadVersion(envelope)}
-                        onValueChange={(value) =>
-                          setVersionMap((prev) => ({
-                            ...prev,
-                            [envelope.id]: value as BulkDownloadVersion,
-                          }))
-                        }
-                        aria-label={t`Download version for ${envelope.title}`}
+                    {isDownloadLocked ? (
+                      <div
+                        className="flex shrink-0 items-center gap-2 text-muted-foreground text-xs"
+                        data-testid="bulk-download-locked-document"
+                        title={t`The download window for this document has expired. Only team administrators and the SGC role can download it.`}
                       >
-                        {versionOptions.map((option) => (
-                          <RadioGroupSegmentedItem key={option.value} value={option.value}>
-                            {option.label}
-                          </RadioGroupSegmentedItem>
-                        ))}
-                      </RadioGroupSegmented>
+                        <LockIcon className="h-4 w-4" />
+                        <Trans>The download window has expired</Trans>
+                      </div>
+                    ) : (
+                      versionOptions && (
+                        <RadioGroupSegmented
+                          className="shrink-0"
+                          value={getDownloadVersion(envelope)}
+                          onValueChange={(value) =>
+                            setVersionMap((prev) => ({
+                              ...prev,
+                              [envelope.id]: value as BulkDownloadVersion,
+                            }))
+                          }
+                          aria-label={t`Download version for ${envelope.title}`}
+                        >
+                          {versionOptions.map((option) => (
+                            <RadioGroupSegmentedItem key={option.value} value={option.value}>
+                              {option.label}
+                            </RadioGroupSegmentedItem>
+                          ))}
+                        </RadioGroupSegmented>
+                      )
                     )}
                   </div>
                 );
@@ -342,7 +464,7 @@ export const EnvelopesBulkDownloadDialog = ({
           {isDownloading && (
             <p className="text-muted-foreground text-sm">
               <Trans>
-                Downloading {progress} / {envelopes.length}...
+                Downloading {progress} / {downloadableEnvelopes.length}...
               </Trans>
             </p>
           )}
@@ -365,8 +487,8 @@ export const EnvelopesBulkDownloadDialog = ({
             <Button
               type="button"
               onClick={() => void onDownload()}
-              loading={isDownloading}
-              disabled={envelopes.length === 0 || isOverDownloadLimit}
+              loading={isDownloading || isLoadingDownloadPolicies}
+              disabled={downloadableEnvelopes.length === 0 || isOverDownloadLimit || isLoadingDownloadPolicies}
             >
               <Trans>Download</Trans>
             </Button>

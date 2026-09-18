@@ -22,6 +22,15 @@ export const ZGetEnvelopeDownloadPoliciesRequestSchema = z.object({
    * Recipient token, when the viewer is a recipient rather than a team member.
    */
   token: z.string().optional(),
+
+  /**
+   * The recipient tokens of the viewer for every envelope in a single request.
+   *
+   * Lets a table resolve all the rows it renders at once: each envelope reached
+   * through one of these tokens is resolved with recipient-level permissions,
+   * while the rest fall back to the team role of the session.
+   */
+  tokens: z.array(z.string()).max(50).optional(),
 });
 
 export type TGetEnvelopeDownloadPoliciesRequest = z.infer<typeof ZGetEnvelopeDownloadPoliciesRequestSchema>;

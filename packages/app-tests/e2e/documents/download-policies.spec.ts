@@ -311,3 +311,61 @@ test('[DOWNLOAD POLICY]: the signing complete page locks downloads once the wind
     page.getByText(/The download window for this document has expired. Contact the sender to request a copy./),
   ).toBeVisible();
 });
+
+test('[DOWNLOAD POLICY]: the documents table resolves the page download policies in a single request', async ({
+  page,
+}) => {
+  const { owner, team } = await seedTeam();
+
+  const { user: signer } = await seedUser();
+
+  const documents = await Promise.all(
+    [1, 2].map(async (index) =>
+      seedCompletedDocument(owner, team.id, [signer], {
+        createDocumentOptions: {
+          title: `[TEST] Batched download policy ${index}`,
+        },
+      }),
+    ),
+  );
+
+  const policyRequestPayloads: string[] = [];
+
+  page.on('request', (request) => {
+    if (request.url().includes('document.getEnvelopeDownloadPolicies')) {
+      policyRequestPayloads.push(`${request.url()} ${request.postData() ?? ''}`);
+    }
+  });
+
+  const policyResponsePromise = page.waitForResponse((response) =>
+    response.url().includes('document.getEnvelopeDownloadPolicies'),
+  );
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/documents`,
+  });
+
+  await expect(page.getByRole('link', { name: documents[0].title })).toBeVisible();
+
+  // Waiting for the response means every query the page triggered has already
+  // been sent, so a per row request cannot hide behind the batch.
+  await policyResponsePromise;
+
+  // A request that mentions some, but not all, of the page envelopes is the per
+  // row query this test exists to prevent.
+  const perRowPolicyRequests = policyRequestPayloads.filter(
+    (payload) =>
+      documents.some((document) => payload.includes(document.id)) &&
+      !documents.every((document) => payload.includes(document.id)),
+  );
+
+  expect(perRowPolicyRequests).toEqual([]);
+
+  const batchPolicyRequests = policyRequestPayloads.filter((payload) =>
+    documents.every((document) => payload.includes(document.id)),
+  );
+
+  expect(batchPolicyRequests.length).toBeGreaterThan(0);
+});

@@ -11,9 +11,11 @@ import { AppError } from '@documenso/lib/errors/app-error';
 import { ZDocumentAccessAuthTypesSchema, ZDocumentActionAuthTypesSchema } from '@documenso/lib/types/document-auth';
 import { DocumentEmailEvents, ZDocumentEmailSettingsSchema } from '@documenso/lib/types/document-email';
 import {
+  MAX_DOWNLOAD_WINDOW_HOURS,
   type TDocumentMetaDateFormat,
   ZDocumentMetaDateFormatSchema,
   ZDocumentMetaTimezoneSchema,
+  ZDownloadWindowHoursSchema,
 } from '@documenso/lib/types/document-meta';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { isValidRedirectUrl } from '@documenso/lib/utils/is-valid-redirect-url';
@@ -51,7 +53,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@documenso/ui/primitives/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@documenso/ui/primitives/form/form';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@documenso/ui/primitives/form/form';
 import { Input } from '@documenso/ui/primitives/input';
 import { MultiSelectCombobox } from '@documenso/ui/primitives/multi-select-combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@documenso/ui/primitives/select';
@@ -112,6 +122,7 @@ export const ZAddSettingsFormSchema = z.object({
     }),
     envelopeExpirationPeriod: ZEnvelopeExpirationPeriod.nullish(),
     reminderSettings: ZEnvelopeReminderSettings.nullish(),
+    downloadWindowHours: ZDownloadWindowHoursSchema.nullish(),
   }),
 });
 
@@ -202,6 +213,7 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
         signatureTypes: extractTeamSignatureSettings(envelope.documentMeta),
         envelopeExpirationPeriod: envelope.documentMeta?.envelopeExpirationPeriod ?? null,
         reminderSettings: envelope.documentMeta?.reminderSettings ?? null,
+        downloadWindowHours: envelope.documentMeta?.downloadWindowHours ?? null,
       },
     };
   };
@@ -236,6 +248,10 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
 
   const canUpdateVisibility = canAccessTeamDocument(team.currentTeamRole, envelope.visibility);
 
+  // An embedding that predates the setting does not send the flag, in which case
+  // configuring the download window stays available.
+  const canConfigureDownloadWindow = settings?.allowConfigureDownloadWindow ?? true;
+
   const onFormSubmit = async (data: TAddSettingsFormSchema) => {
     const {
       timezone,
@@ -251,6 +267,7 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
       emailReplyTo,
       envelopeExpirationPeriod,
       reminderSettings,
+      downloadWindowHours,
     } = data.meta;
 
     const parsedGlobalAccessAuth = z.array(ZDocumentAccessAuthTypesSchema).safeParse(data.globalAccessAuth);
@@ -280,6 +297,7 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
           uploadSignatureEnabled: signatureTypes.includes(DocumentSignatureType.UPLOAD),
           envelopeExpirationPeriod,
           reminderSettings,
+          downloadWindowHours,
         },
       });
 
@@ -706,6 +724,53 @@ export const EnvelopeEditorSettingsDialog = ({ trigger, ...props }: EnvelopeEdit
                                   disabled={envelopeHasBeenSent}
                                 />
                               </FormControl>
+
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+
+                      {canConfigureDownloadWindow && (
+                        <FormField
+                          control={form.control}
+                          name="meta.downloadWindowHours"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex flex-row items-center">
+                                <Trans>Download window</Trans>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <InfoIcon className="mx-2 h-4 w-4" />
+                                  </TooltipTrigger>
+
+                                  <TooltipContent className="max-w-xs text-muted-foreground">
+                                    <Trans>
+                                      How long the document can be downloaded after it is completed. Only administrators
+                                      and the SGC role can download it afterwards.
+                                    </Trans>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </FormLabel>
+
+                              <FormControl>
+                                <Input
+                                  className="bg-background"
+                                  data-testid="envelope-editor-download-window-hours"
+                                  type="number"
+                                  min={1}
+                                  max={MAX_DOWNLOAD_WINDOW_HOURS}
+                                  value={field.value ?? ''}
+                                  onChange={(event) =>
+                                    field.onChange(event.target.value === '' ? null : Number(event.target.value))
+                                  }
+                                  disabled={field.disabled || envelopeHasBeenSent}
+                                />
+                              </FormControl>
+
+                              <FormDescription>
+                                <Trans>Hours. Leave empty to use the global download window.</Trans>
+                              </FormDescription>
 
                               <FormMessage />
                             </FormItem>
