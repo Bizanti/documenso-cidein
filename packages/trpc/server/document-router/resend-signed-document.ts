@@ -1,6 +1,5 @@
 import { resendSignedDocument } from '@documenso/lib/server-only/document/resend-signed-document';
 
-import { ZGenericSuccessResponse } from '../schema';
 import { authenticatedProcedure } from '../trpc';
 import {
   resendSignedDocumentMeta,
@@ -23,7 +22,7 @@ export const resendSignedDocumentRoute = authenticatedProcedure
       },
     });
 
-    await resendSignedDocument({
+    const result = await resendSignedDocument({
       userId: ctx.user.id,
       teamId,
       id: {
@@ -35,5 +34,17 @@ export const resendSignedDocumentRoute = authenticatedProcedure
       requestMetadata: ctx.metadata,
     });
 
-    return ZGenericSuccessResponse;
+    // Nothing was delivered, so report it instead of returning a plain success.
+    if (!result.sent) {
+      return {
+        success: true,
+        sent: false,
+        reason: result.reason,
+      };
+    }
+
+    return {
+      success: true,
+      sent: true,
+    };
   });
