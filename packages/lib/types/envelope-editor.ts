@@ -45,6 +45,12 @@ export const ZEnvelopeEditorSettingsSchema = z.object({
       allowConfigureReminders: z.boolean(),
       allowConfigureEmailSender: z.boolean(),
       allowConfigureEmailReplyTo: z.boolean(),
+
+      /**
+       * Optional so an embedding that predates this setting keeps working, in
+       * which case configuring the download window stays allowed.
+       */
+      allowConfigureDownloadWindow: z.boolean().optional(),
     })
     .nullable(),
 
@@ -125,6 +131,7 @@ export const DEFAULT_EDITOR_CONFIG: EnvelopeEditorConfig = {
     allowConfigureReminders: true,
     allowConfigureEmailSender: true,
     allowConfigureEmailReplyTo: true,
+    allowConfigureDownloadWindow: true,
   },
   actions: {
     allowAttachments: true,
@@ -184,6 +191,7 @@ export const DEFAULT_EMBEDDED_EDITOR_CONFIG = {
     allowConfigureReminders: true,
     allowConfigureEmailSender: true,
     allowConfigureEmailReplyTo: true,
+    allowConfigureDownloadWindow: true,
   },
   actions: {
     allowAttachments: true,
@@ -285,6 +293,7 @@ export const ZEditorEnvelopeSchema = EnvelopeSchema.pick({
     emailId: true,
     emailReplyTo: true,
     envelopeExpirationPeriod: true,
+    downloadWindowHours: true,
     reminderSettings: true,
   }),
   recipients: ZEnvelopeRecipientLiteSchema.array(),

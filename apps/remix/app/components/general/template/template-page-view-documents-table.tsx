@@ -1,4 +1,5 @@
 import { useUpdateSearchParams } from '@documenso/lib/client-only/hooks/use-update-search-params';
+import { useSession } from '@documenso/lib/client-only/providers/session';
 import { ZUrlSearchParamsSchema } from '@documenso/lib/types/search-params';
 import { trpc } from '@documenso/trpc/react';
 import type { DataTableColumnDef } from '@documenso/ui/primitives/data-table';
@@ -19,6 +20,8 @@ import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { z } from 'zod';
 
+import { getEnvelopeDownloadPolicyRequests } from '~/components/dialogs/envelope-download-policy';
+import { EnvelopeDownloadPolicyProvider } from '~/components/dialogs/envelope-download-policy-provider';
 import { SearchParamSelector } from '~/components/forms/search-param-selector';
 import { DocumentSearch } from '~/components/general/document/document-search';
 import { DocumentStatus } from '~/components/general/document/document-status';
@@ -54,6 +57,8 @@ type TemplatePageViewDocumentsTableProps = {
 export const TemplatePageViewDocumentsTable = ({ templateId }: TemplatePageViewDocumentsTableProps) => {
   const { _, i18n } = useLingui();
 
+  const { user } = useSession();
+
   const [searchParams] = useSearchParams();
   const updateSearchParams = useUpdateSearchParams();
 
@@ -88,6 +93,16 @@ export const TemplatePageViewDocumentsTable = ({ templateId }: TemplatePageViewD
     currentPage: 1,
     totalPages: 1,
   };
+
+  const downloadPolicyRequests = useMemo(
+    () =>
+      getEnvelopeDownloadPolicyRequests({
+        envelopes: results.data,
+        userEmail: user.email,
+        teamEmail: team.teamEmail?.email,
+      }),
+    [results.data, team.teamEmail?.email, user.email],
+  );
 
   const columns = useMemo(() => {
     return [
@@ -209,47 +224,49 @@ export const TemplatePageViewDocumentsTable = ({ templateId }: TemplatePageViewD
         <PeriodSelector />
       </div>
 
-      <DataTable
-        columns={columns}
-        data={results.data}
-        perPage={results.perPage}
-        currentPage={results.currentPage}
-        totalPages={results.totalPages}
-        onPaginationChange={onPaginationChange}
-        error={{
-          enable: isLoadingError,
-        }}
-        skeleton={{
-          enable: isLoading,
-          rows: 3,
-          component: (
-            <>
-              <TableCell>
-                <Skeleton className="h-4 w-12 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-24 rounded-full" />
-              </TableCell>
-              <TableCell className="py-4 pr-4">
-                <Skeleton className="h-12 w-12 flex-shrink-0 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-12 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <Skeleton className="h-4 w-12 rounded-full" />
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-row justify-end space-x-2">
-                  <Skeleton className="h-10 w-20 rounded" />
-                </div>
-              </TableCell>
-            </>
-          ),
-        }}
-      >
-        {(table) => <DataTablePagination additionalInformation="VisibleCount" table={table} />}
-      </DataTable>
+      <EnvelopeDownloadPolicyProvider requests={downloadPolicyRequests}>
+        <DataTable
+          columns={columns}
+          data={results.data}
+          perPage={results.perPage}
+          currentPage={results.currentPage}
+          totalPages={results.totalPages}
+          onPaginationChange={onPaginationChange}
+          error={{
+            enable: isLoadingError,
+          }}
+          skeleton={{
+            enable: isLoading,
+            rows: 3,
+            component: (
+              <>
+                <TableCell>
+                  <Skeleton className="h-4 w-12 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-24 rounded-full" />
+                </TableCell>
+                <TableCell className="py-4 pr-4">
+                  <Skeleton className="h-12 w-12 flex-shrink-0 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-12 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <Skeleton className="h-4 w-12 rounded-full" />
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-row justify-end space-x-2">
+                    <Skeleton className="h-10 w-20 rounded" />
+                  </div>
+                </TableCell>
+              </>
+            ),
+          }}
+        >
+          {(table) => <DataTablePagination additionalInformation="VisibleCount" table={table} />}
+        </DataTable>
+      </EnvelopeDownloadPolicyProvider>
     </div>
   );
 };

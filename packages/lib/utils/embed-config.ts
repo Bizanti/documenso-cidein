@@ -70,6 +70,9 @@ export const buildEmbeddedFeatures = (features: DeepPartial<EnvelopeEditorConfig
             allowConfigureEmailReplyTo:
               features.settings?.allowConfigureEmailReplyTo ??
               DEFAULT_EMBEDDED_EDITOR_CONFIG.settings.allowConfigureEmailReplyTo,
+            allowConfigureDownloadWindow:
+              features.settings?.allowConfigureDownloadWindow ??
+              DEFAULT_EMBEDDED_EDITOR_CONFIG.settings.allowConfigureDownloadWindow,
           }
         : null,
 
