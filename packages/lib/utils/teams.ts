@@ -260,3 +260,14 @@ export const isMemberSgc = (role: TeamMemberRole) => {
 export const hasSgcDownloadPrivileges = (role: TeamMemberRole) => {
   return TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES.some((i) => i === role);
 };
+
+/**
+ * Determines whether a team role may change the visibility of a document or
+ * template that currently has the given visibility.
+ *
+ * Members cannot change visibility at all, managers can only keep it within the
+ * visibilities they can access, and admins and SGC can change it freely.
+ */
+export const canChangeTeamDocumentVisibility = (role: TeamMemberRole, visibility: DocumentVisibility) => {
+  return isMemberManagerOrAbove(role) && canAccessTeamDocument(role, visibility);
+};
