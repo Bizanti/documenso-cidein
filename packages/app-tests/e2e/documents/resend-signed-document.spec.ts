@@ -17,7 +17,7 @@ test.describe.configure({ mode: 'parallel' });
 const INBUCKET_URL = 'http://localhost:9000';
 
 const seedSignedDocument = async () => {
-  const { owner, team } = await seedTeam();
+  const { owner, team, organisation } = await seedTeam();
 
   const { user: signer } = await seedUser();
 
@@ -42,7 +42,50 @@ const seedSignedDocument = async () => {
     },
   });
 
-  return { owner, team, document, recipient, signer };
+  return { owner, team, organisation, document, recipient, signer };
+};
+
+/**
+ * Prevents the organisation from sending any email.
+ */
+const disableOrganisationEmails = async (organisationId: string) => {
+  const organisation = await prisma.organisation.findFirstOrThrow({
+    where: {
+      id: organisationId,
+    },
+    select: {
+      organisationClaim: true,
+    },
+  });
+
+  await prisma.organisationClaim.update({
+    where: {
+      id: organisation.organisationClaim.id,
+    },
+    data: {
+      flags: {
+        ...(organisation.organisationClaim.flags as Record<string, unknown>),
+        disableEmails: true,
+      },
+    },
+  });
+};
+
+/**
+ * The messages currently sitting in the recipient's test mailbox.
+ *
+ * An unknown mailbox has no messages rather than an error response.
+ */
+const getMailboxMessages = async (email: string) => {
+  const mailbox = email.split('@')[0];
+
+  const response = await fetch(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}`);
+
+  if (!response.ok) {
+    return [];
+  }
+
+  return (await response.json()) as { id: string }[];
 };
 
 type ResendSignedDocumentOptions = {
@@ -148,9 +191,7 @@ test('[RESEND SIGNED]: team members with the SGC role are copied on the resent d
   const mailbox = recipient.email.split('@')[0];
 
   await expect(async () => {
-    const messages = (await fetch(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}`).then(
-      async (res) => await res.json(),
-    )) as { id: string }[];
+    const messages = await getMailboxMessages(recipient.email);
 
     expect(messages.length).toBeGreaterThan(0);
 
@@ -188,4 +229,50 @@ test('[RESEND SIGNED]: the action is not offered for documents that are not comp
   await openDropdownMenu(page, row.getByTestId('document-table-action-btn'));
 
   await expect(page.getByTestId('document-resend-signed-action')).toHaveCount(0);
+});
+
+test('[RESEND SIGNED]: nothing is sent and the user is told when the organisation has emails disabled', async ({
+  page,
+}) => {
+  const { owner, team, organisation, document, recipient } = await seedSignedDocument();
+
+  await disableOrganisationEmails(organisation.id);
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/documents`,
+  });
+
+  await resendSignedDocumentViaUi({
+    page,
+    documentTitle: document.title,
+    recipientId: recipient.id,
+  });
+
+  // The user is told that no email went out, instead of a false success.
+  await expectToastTextToBeVisible(page, 'Signed document not sent');
+  await expectToastTextToBeVisible(page, 'Email sending is disabled for this organisation');
+
+  await expect(page.locator('[role="status"]').getByText('Signed document resent')).toHaveCount(0);
+
+  // No delivery is recorded on the document audit log.
+  const auditLog = await prisma.documentAuditLog.findFirst({
+    where: {
+      envelopeId: document.id,
+      type: 'EMAIL_SENT',
+      data: {
+        path: ['isResending'],
+        equals: true,
+      },
+    },
+  });
+
+  expect(auditLog).toBeNull();
+
+  // And the recipient never received an email. The send happens before the
+  // request resolves, so no waiting is needed by the time the toast is shown.
+  const messages = await getMailboxMessages(recipient.email);
+
+  expect(messages).toHaveLength(0);
 });

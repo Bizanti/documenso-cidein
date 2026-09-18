@@ -1,5 +1,6 @@
 import { DocumentResendEmailTemplate } from '@documenso/email/templates/document-resend';
 import { prisma } from '@documenso/prisma';
+import type { TResendSignedDocumentSkipReason } from '@documenso/trpc/server/document-router/resend-signed-document.types';
 import type { TGetTeamMembersResponse } from '@documenso/trpc/server/team-router/get-team-members.types';
 import { msg } from '@lingui/core/macro';
 import { DocumentStatus, EnvelopeType, TeamMemberRole } from '@prisma/client';
@@ -48,6 +49,46 @@ type GetSignedDocumentResendCcOptions = {
 };
 
 /**
+ * The outcome of a resend of a signed document.
+ *
+ * A resend that delivered no email is not a success: callers must be able to
+ * tell the user that nothing was sent instead of announcing a delivery.
+ */
+export type ResendSignedDocumentResult = { sent: true } | { sent: false; reason: TResendSignedDocumentSkipReason };
+
+type GetResendSignedDocumentSkipReasonOptions = {
+  /**
+   * Whether the organisation (or the requesting user) is prevented from sending emails.
+   */
+  emailsDisabled: boolean;
+
+  /**
+   * The recipients the signed document would be delivered to.
+   */
+  recipients: { email: string }[];
+};
+
+/**
+ * Whether a resend will deliver nothing, and why.
+ *
+ * Returns `null` when at least one email will be handed to the transport.
+ */
+export const getResendSignedDocumentSkipReason = ({
+  emailsDisabled,
+  recipients,
+}: GetResendSignedDocumentSkipReasonOptions): TResendSignedDocumentSkipReason | null => {
+  if (emailsDisabled) {
+    return 'EMAILS_DISABLED';
+  }
+
+  if (!recipients.some(isRecipientEmailValidForSending)) {
+    return 'NO_SENDABLE_RECIPIENTS';
+  }
+
+  return null;
+};
+
+/**
  * The copy list for a signed document delivery: the team members holding the SGC
  * role, minus anyone that already receives the email directly.
  */
@@ -85,6 +126,9 @@ export const getSignedDocumentResendCc = ({
  * Team members holding the SGC download privileges (ADMIN/SGC) are copied on the
  * email, so the quality management team keeps a record of every delivery of a
  * signed document.
+ *
+ * The result reports whether any email was actually sent, so a resend that
+ * delivered nothing is never announced as a success.
  */
 export const resendSignedDocument = async ({
   id,
@@ -93,7 +137,7 @@ export const resendSignedDocument = async ({
   recipientIds,
   message,
   requestMetadata,
-}: ResendSignedDocumentOptions) => {
+}: ResendSignedDocumentOptions): Promise<ResendSignedDocumentResult> => {
   const user = await prisma.user.findFirstOrThrow({
     where: {
       id: userId,
@@ -193,15 +237,23 @@ export const resendSignedDocument = async ({
       meta: envelope.documentMeta,
     });
 
-  // Don't send any emails if the organisation has email sending disabled.
-  if (user.disabled || emailsDisabled) {
-    return envelope;
+  // Nothing is delivered when emails are disabled, so report it instead of
+  // returning as if the document had been resent.
+  const skipReason = getResendSignedDocumentSkipReason({
+    emailsDisabled: user.disabled || emailsDisabled,
+    recipients: recipientsToSend,
+  });
+
+  if (skipReason) {
+    return { sent: false, reason: skipReason };
   }
+
+  const recipientsToDeliver = recipientsToSend.filter(isRecipientEmailValidForSending);
 
   await assertOrganisationRatesAndLimits({
     organisationId,
     organisationClaim: claims,
-    count: recipientsToSend.length,
+    count: recipientsToDeliver.length,
     type: 'email',
   });
 
@@ -228,15 +280,11 @@ export const resendSignedDocument = async ({
 
   const cc = getSignedDocumentResendCc({
     teamMembers,
-    recipientEmails: recipientsToSend.map((recipient) => recipient.email),
+    recipientEmails: recipientsToDeliver.map((recipient) => recipient.email),
   });
 
   await Promise.all(
-    recipientsToSend.map(async (recipient) => {
-      if (!isRecipientEmailValidForSending(recipient)) {
-        return;
-      }
-
+    recipientsToDeliver.map(async (recipient) => {
       const i18n = await getI18nInstance(emailLanguage);
 
       const customEmailTemplate = {
@@ -304,5 +352,5 @@ export const resendSignedDocument = async ({
     }),
   );
 
-  return envelope;
+  return { sent: true };
 };

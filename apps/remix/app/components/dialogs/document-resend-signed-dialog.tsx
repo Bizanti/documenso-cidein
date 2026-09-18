@@ -4,6 +4,7 @@ import type { TEnvelopeRecipientLite } from '@documenso/lib/types/recipient';
 import { recipientAbbreviation } from '@documenso/lib/utils/recipient-formatter';
 import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { trpc as trpcReact } from '@documenso/trpc/react';
+import type { TResendSignedDocumentSkipReason } from '@documenso/trpc/server/document-router/resend-signed-document.types';
 import { cn } from '@documenso/ui/lib/utils';
 import { Button } from '@documenso/ui/primitives/button';
 import { Checkbox } from '@documenso/ui/primitives/checkbox';
@@ -21,6 +22,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { Textarea } from '@documenso/ui/primitives/textarea';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
@@ -45,9 +47,27 @@ export const ZDocumentResendSignedFormSchema = z.object({
 export type TDocumentResendSignedFormSchema = z.infer<typeof ZDocumentResendSignedFormSchema>;
 
 /**
+ * Why the server did not send the signed document, ready to be shown to the user.
+ */
+const getNotSentDescription = (reason?: TResendSignedDocumentSkipReason): MessageDescriptor => {
+  switch (reason) {
+    case 'EMAILS_DISABLED':
+      return msg`Email sending is disabled for this organisation, so no email was sent.`;
+
+    case 'NO_SENDABLE_RECIPIENTS':
+      return msg`None of the selected recipients has an email address the document can be delivered to, so no email was sent.`;
+
+    default:
+      return msg`No email was sent. Please try again or contact support.`;
+  }
+};
+
+/**
  * Delivers the signed document to the selected recipients again, with an
  * optional message. Every delivery is recorded on the document audit log and
  * copies in the team members holding the SGC role.
+ *
+ * The dialog only announces a resend when an email was actually sent.
  */
 export const DocumentResendSignedDialog = ({ documentId, recipients, trigger }: DocumentResendSignedDialogProps) => {
   const { toast } = useToast();
@@ -80,11 +100,23 @@ export const DocumentResendSignedDialog = ({ documentId, recipients, trigger }: 
 
   const onFormSubmit = async ({ recipients, message }: TDocumentResendSignedFormSchema) => {
     try {
-      await resendSignedDocument({
+      const { sent, reason } = await resendSignedDocument({
         documentId,
         recipients,
         message: message?.trim() ? message : undefined,
       });
+
+      // Nothing was delivered, so tell the user instead of announcing a resend.
+      if (!sent) {
+        toast({
+          title: t`Signed document not sent`,
+          description: i18n._(getNotSentDescription(reason)),
+          variant: 'destructive',
+          duration: 7500,
+        });
+
+        return;
+      }
 
       await trpcUtils.document.auditLog.find.invalidate();
       await trpcUtils.document.findDocumentsInternal.invalidate();
