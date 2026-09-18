@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { TEAM_DOCUMENT_VISIBILITY_MAP, TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES } from '../constants/teams';
 import {
   canAccessTeamDocument,
+  canChangeTeamDocumentVisibility,
   canExecuteTeamAction,
   getHighestTeamRoleInGroup,
   hasSgcDownloadPrivileges,
@@ -14,6 +15,8 @@ import {
   isMemberSgc,
   isTeamRoleWithinUserHierarchy,
 } from './teams';
+
+const VISIBILITIES = [DocumentVisibility.ADMIN, DocumentVisibility.MANAGER_AND_ABOVE, DocumentVisibility.EVERYONE];
 
 describe('TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES', () => {
   it('grants SGC download privileges to ADMIN and SGC only', () => {
@@ -74,20 +77,50 @@ describe('team permissions', () => {
     );
   });
 
-  it('resolves visibility through canAccessTeamDocument for every role', () => {
-    expect(canAccessTeamDocument(TeamMemberRole.ADMIN, DocumentVisibility.ADMIN)).toBe(true);
-    expect(canAccessTeamDocument(TeamMemberRole.ADMIN, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(true);
-    expect(canAccessTeamDocument(TeamMemberRole.ADMIN, DocumentVisibility.EVERYONE)).toBe(true);
+  it('covers every team member role in the visibility map', () => {
+    expect(Object.keys(TEAM_DOCUMENT_VISIBILITY_MAP).sort()).toEqual(Object.values(TeamMemberRole).sort());
+  });
 
-    expect(canAccessTeamDocument(TeamMemberRole.SGC, DocumentVisibility.ADMIN)).toBe(true);
-    expect(canAccessTeamDocument(TeamMemberRole.SGC, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(true);
-    expect(canAccessTeamDocument(TeamMemberRole.SGC, DocumentVisibility.EVERYONE)).toBe(true);
+  it('grants ADMIN and SGC access to every visibility', () => {
+    for (const role of [TeamMemberRole.ADMIN, TeamMemberRole.SGC]) {
+      for (const visibility of VISIBILITIES) {
+        expect(canAccessTeamDocument(role, visibility)).toBe(true);
+      }
+    }
+  });
 
-    expect(canAccessTeamDocument(TeamMemberRole.MANAGER, DocumentVisibility.ADMIN)).toBe(false);
+  it('limits MANAGER to EVERYONE and MANAGER_AND_ABOVE', () => {
+    expect(canAccessTeamDocument(TeamMemberRole.MANAGER, DocumentVisibility.EVERYONE)).toBe(true);
     expect(canAccessTeamDocument(TeamMemberRole.MANAGER, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(true);
+    expect(canAccessTeamDocument(TeamMemberRole.MANAGER, DocumentVisibility.ADMIN)).toBe(false);
+  });
 
-    expect(canAccessTeamDocument(TeamMemberRole.MEMBER, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(false);
+  it('limits MEMBER to EVERYONE', () => {
     expect(canAccessTeamDocument(TeamMemberRole.MEMBER, DocumentVisibility.EVERYONE)).toBe(true);
+    expect(canAccessTeamDocument(TeamMemberRole.MEMBER, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(false);
+    expect(canAccessTeamDocument(TeamMemberRole.MEMBER, DocumentVisibility.ADMIN)).toBe(false);
+  });
+});
+
+describe('canChangeTeamDocumentVisibility', () => {
+  it('allows ADMIN and SGC to change every visibility', () => {
+    for (const role of [TeamMemberRole.ADMIN, TeamMemberRole.SGC]) {
+      for (const visibility of VISIBILITIES) {
+        expect(canChangeTeamDocumentVisibility(role, visibility)).toBe(true);
+      }
+    }
+  });
+
+  it('allows MANAGER to keep EVERYONE and MANAGER_AND_ABOVE documents only', () => {
+    expect(canChangeTeamDocumentVisibility(TeamMemberRole.MANAGER, DocumentVisibility.EVERYONE)).toBe(true);
+    expect(canChangeTeamDocumentVisibility(TeamMemberRole.MANAGER, DocumentVisibility.MANAGER_AND_ABOVE)).toBe(true);
+    expect(canChangeTeamDocumentVisibility(TeamMemberRole.MANAGER, DocumentVisibility.ADMIN)).toBe(false);
+  });
+
+  it('does not allow MEMBER to change visibility', () => {
+    for (const visibility of VISIBILITIES) {
+      expect(canChangeTeamDocumentVisibility(TeamMemberRole.MEMBER, visibility)).toBe(false);
+    }
   });
 });
 
