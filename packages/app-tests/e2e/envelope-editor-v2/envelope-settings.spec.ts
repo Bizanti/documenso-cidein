@@ -79,6 +79,10 @@ const clickSettingsDialogHeader = async (root: Page) => {
 const getComboboxByLabel = (root: Page, label: string) =>
   root.locator(`label:has-text("${label}")`).locator('xpath=..').locator('[role="combobox"]').first();
 
+// The download window field is a number input too, so the expiration amount needs
+// an explicit locator instead of `getByRole('spinbutton')`.
+const getExpirationAmountInput = (root: Page) => root.locator('[data-testid="envelope-expiration-amount"]');
+
 const selectMultiSelectOption = async (
   root: Page,
   dataTestId: 'documentAccessSelectValue' | 'documentActionSelectValue',
@@ -137,8 +141,8 @@ const runSettingsFlow = async ({ root }: TEnvelopeEditorSurface, { externalId, i
 
   await getComboboxByLabel(root, 'Expiration').click();
   await root.getByRole('option', { name: TEST_SETTINGS_VALUES.expirationMode }).click();
-  await root.getByRole('spinbutton').clear();
-  await root.getByRole('spinbutton').fill(String(TEST_SETTINGS_VALUES.expirationAmount));
+  await getExpirationAmountInput(root).clear();
+  await getExpirationAmountInput(root).fill(String(TEST_SETTINGS_VALUES.expirationAmount));
   const expirationUnitTrigger = root
     .locator('button[role="combobox"]')
     .filter({ hasText: /Months|Days|Weeks|Years/ })
@@ -271,7 +275,7 @@ const runSettingsFlow = async ({ root }: TEnvelopeEditorSurface, { externalId, i
     TEST_SETTINGS_VALUES.distributionMethod,
   );
   await expect(getComboboxByLabel(root, 'Expiration')).toContainText(TEST_SETTINGS_VALUES.expirationMode);
-  await expect(root.getByRole('spinbutton')).toHaveValue(String(TEST_SETTINGS_VALUES.expirationAmount));
+  await expect(getExpirationAmountInput(root)).toHaveValue(String(TEST_SETTINGS_VALUES.expirationAmount));
   await expect(
     root.locator('button[role="combobox"]').filter({ hasText: TEST_SETTINGS_VALUES.expirationUnit }).first(),
   ).toBeVisible();
