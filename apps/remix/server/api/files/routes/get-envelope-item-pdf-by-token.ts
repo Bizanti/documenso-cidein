@@ -1,3 +1,8 @@
+import {
+  DOWNLOAD_DENIAL_MESSAGE,
+  getEnvelopeItemViewDenial,
+  getRecipientDownloadPolicy,
+} from '@documenso/lib/server-only/document/download-policy';
 import { prisma } from '@documenso/prisma';
 import { sValidator } from '@hono/standard-validator';
 import type { Prisma } from '@prisma/client';
@@ -65,6 +70,12 @@ route.get(
         envelope: {
           select: {
             status: true,
+            completedAt: true,
+            documentMeta: {
+              select: {
+                downloadWindowHours: true,
+              },
+            },
           },
         },
       },
@@ -74,25 +85,42 @@ route.get(
       return c.json({ error: 'Not found' }, 404);
     }
 
+    const { status, completedAt, documentMeta } = envelopeItem.envelope;
+
     // Controlled signers may view the document while signing, but not the
     // final document once the envelope is completed or rejected.
-    const isRestricted =
-      version === 'current' &&
-      (await shouldRestrictTokenFileAccess({
-        token,
-        envelopeId,
-        status: envelopeItem.envelope.status,
-      }));
+    const isRestricted = await shouldRestrictTokenFileAccess({
+      token,
+      envelopeId,
+      status,
+    });
 
     if (isRestricted) {
       return c.json({ error: 'Controlled signers are not permitted to access the final document' }, 403);
+    }
+
+    // The viewer hands out the same stored bytes as the download routes, so it
+    // answers to the same policy. Recipients never hold team privileges.
+    const downloadPolicy = await getRecipientDownloadPolicy({
+      status,
+      completedAt,
+      downloadWindowHours: documentMeta?.downloadWindowHours,
+    });
+
+    const viewDenial = getEnvelopeItemViewDenial({
+      version,
+      policy: downloadPolicy,
+    });
+
+    if (viewDenial) {
+      return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[viewDenial], code: viewDenial }, 403);
     }
 
     return await handleEnvelopeItemPdfRequest({
       c,
       envelopeItem,
       version,
-      cacheStrategy: 'private',
+      status,
     });
   },
 );

@@ -99,6 +99,11 @@ export const filesRoute = new Hono<HonoEnv>()
           id: envelopeId,
         },
         include: {
+          documentMeta: {
+            select: {
+              downloadWindowHours: true,
+            },
+          },
           envelopeItems: {
             where: {
               id: envelopeItemId,
@@ -129,6 +134,25 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (!hasAccess) {
         return c.json({ error: 'User does not have access to the team that this envelope is associated with' }, 403);
+      }
+
+      // The viewer hands out the same stored bytes as the download routes, so it
+      // answers to the same policy.
+      const downloadPolicy = await getUserDownloadPolicy({
+        userId,
+        teamId: envelope.teamId,
+        status: envelope.status,
+        completedAt: envelope.completedAt,
+        downloadWindowHours: envelope.documentMeta?.downloadWindowHours,
+      });
+
+      const viewDenial = getEnvelopeItemDownloadDenial({
+        version: 'signed',
+        policy: downloadPolicy,
+      });
+
+      if (viewDenial) {
+        return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[viewDenial], code: viewDenial }, 403);
       }
 
       if (!envelopeItem.documentData) {
@@ -297,7 +321,15 @@ export const filesRoute = new Hono<HonoEnv>()
       const envelopeItem = await prisma.envelopeItem.findUnique({
         where: envelopeWhereQuery,
         include: {
-          envelope: true,
+          envelope: {
+            include: {
+              documentMeta: {
+                select: {
+                  downloadWindowHours: true,
+                },
+              },
+            },
+          },
           documentData: true,
         },
       });
@@ -316,6 +348,23 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (isViewRestricted) {
         return c.json({ error: 'Controlled signers are not permitted to access the final document' }, 403);
+      }
+
+      // The viewer hands out the same stored bytes as the download routes, so it
+      // answers to the same policy. Recipients never hold team privileges.
+      const downloadPolicy = await getRecipientDownloadPolicy({
+        status: envelopeItem.envelope.status,
+        completedAt: envelopeItem.envelope.completedAt,
+        downloadWindowHours: envelopeItem.envelope.documentMeta?.downloadWindowHours,
+      });
+
+      const viewDenial = getEnvelopeItemDownloadDenial({
+        version: 'signed',
+        policy: downloadPolicy,
+      });
+
+      if (viewDenial) {
+        return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[viewDenial], code: viewDenial }, 403);
       }
 
       if (!envelopeItem.documentData) {

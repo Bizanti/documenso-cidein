@@ -9,9 +9,11 @@ import {
   getDownloadWindowExpiresAt,
   getEnvelopeDownloadPolicy,
   getEnvelopeItemDownloadDenial,
+  getEnvelopeItemViewDenial,
   getUserDownloadPolicy,
   isDownloadWindowExpired,
   isFinalDocumentStatus,
+  toDownloadVersion,
 } from './download-policy';
 
 vi.mock('../site-settings/get-download-window-hours');
@@ -413,5 +415,107 @@ describe('getEnvelopeItemDownloadDenial', () => {
     expect(getEnvelopeItemDownloadDenial({ version: 'original', policy })).toBeNull();
     expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBeNull();
     expect(getEnvelopeItemDownloadDenial({ version: 'pending', policy })).toBeNull();
+  });
+});
+
+describe('toDownloadVersion', () => {
+  it('maps the viewer versions onto the download versions', () => {
+    expect(toDownloadVersion('initial')).toBe('original');
+    expect(toDownloadVersion('current')).toBe('signed');
+  });
+});
+
+describe('getEnvelopeItemViewDenial', () => {
+  const policyFor = ({
+    status,
+    role,
+    now,
+    windowHours = 48,
+  }: {
+    status: DocumentStatus;
+    role: TeamMemberRole | null;
+    now: Date;
+    windowHours?: number | null;
+  }) =>
+    buildEnvelopeDownloadPolicy({
+      status,
+      completedAt,
+      windowHours,
+      role,
+      now,
+    });
+
+  it('denies the initial version to recipients and members of a final document', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: TeamMemberRole.MEMBER,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN,
+    );
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+  });
+
+  it('keeps the initial version for ADMIN and SGC', () => {
+    const policy = policyFor({
+      status: DocumentStatus.REJECTED,
+      role: TeamMemberRole.SGC,
+      now: hoursAfter(completedAt, 1),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBeNull();
+  });
+
+  it('denies the current version once the download window elapses', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: null,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.DOWNLOAD_WINDOW_EXPIRED,
+    );
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN,
+    );
+  });
+
+  it('leaves both versions to privileged viewers past the window', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: TeamMemberRole.ADMIN,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBeNull();
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+  });
+
+  it('keeps both versions while the document is not final', () => {
+    const policy = policyFor({
+      status: DocumentStatus.PENDING,
+      role: null,
+      now: hoursAfter(completedAt, 100),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBeNull();
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+  });
+
+  it('keeps both versions while the window is disabled', () => {
+    const policy = policyFor({
+      status: DocumentStatus.COMPLETED,
+      role: null,
+      windowHours: null,
+      now: hoursAfter(completedAt, 100000),
+    });
+
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN,
+    );
   });
 });
