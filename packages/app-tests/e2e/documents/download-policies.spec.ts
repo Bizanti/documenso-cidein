@@ -329,8 +329,6 @@ test('[DOWNLOAD POLICY]: the documents table resolves the page download policies
     ),
   );
 
-  // The batch request carries every envelope id of the page, so a request
-  // mentioning all of them proves the rows were not resolved one by one.
   const policyRequestPayloads: string[] = [];
 
   page.on('request', (request) => {
@@ -338,6 +336,10 @@ test('[DOWNLOAD POLICY]: the documents table resolves the page download policies
       policyRequestPayloads.push(`${request.url()} ${request.postData() ?? ''}`);
     }
   });
+
+  const policyResponsePromise = page.waitForResponse((response) =>
+    response.url().includes('document.getEnvelopeDownloadPolicies'),
+  );
 
   await apiSignin({
     page,
@@ -347,7 +349,23 @@ test('[DOWNLOAD POLICY]: the documents table resolves the page download policies
 
   await expect(page.getByRole('link', { name: documents[0].title })).toBeVisible();
 
-  await expect
-    .poll(() => policyRequestPayloads.some((payload) => documents.every((document) => payload.includes(document.id))))
-    .toBe(true);
+  // Waiting for the response means every query the page triggered has already
+  // been sent, so a per row request cannot hide behind the batch.
+  await policyResponsePromise;
+
+  // A request that mentions some, but not all, of the page envelopes is the per
+  // row query this test exists to prevent.
+  const perRowPolicyRequests = policyRequestPayloads.filter(
+    (payload) =>
+      documents.some((document) => payload.includes(document.id)) &&
+      !documents.every((document) => payload.includes(document.id)),
+  );
+
+  expect(perRowPolicyRequests).toEqual([]);
+
+  const batchPolicyRequests = policyRequestPayloads.filter((payload) =>
+    documents.every((document) => payload.includes(document.id)),
+  );
+
+  expect(batchPolicyRequests.length).toBeGreaterThan(0);
 });

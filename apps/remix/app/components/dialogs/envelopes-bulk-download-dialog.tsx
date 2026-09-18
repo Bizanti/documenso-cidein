@@ -129,8 +129,20 @@ export const EnvelopesBulkDownloadDialog = ({
     setProgress(0);
   }, [open]);
 
-  const getDownloadVersion = (envelope: EnvelopeBulkDownloadItem): BulkDownloadVersion =>
-    versionMap[envelope.id] ?? getDefaultVersion(envelope);
+  /**
+   * The version to download for an envelope: the one the viewer selected, or the
+   * first version the policy still allows when that selection is no longer valid.
+   */
+  const getDownloadVersion = (envelope: EnvelopeBulkDownloadItem): BulkDownloadVersion => {
+    const selectedVersion = versionMap[envelope.id];
+    const versionOptions = getVersionOptions(envelope);
+
+    if (selectedVersion && (!versionOptions || versionOptions.some((option) => option.value === selectedVersion))) {
+      return selectedVersion;
+    }
+
+    return versionOptions?.[0]?.value ?? getDefaultVersion(envelope);
+  };
 
   /**
    * The version options selectable for an envelope, mirroring the gating used
@@ -139,25 +151,43 @@ export const EnvelopesBulkDownloadDialog = ({
    *   - PENDING (non-legacy): partial or original. Legacy envelopes use a
    *     field-rendering pipeline the partial PDF helper does not implement.
    *   - Anything else: original only, so no choice is shown.
+   *
+   * The download policy of the envelope filters the list further, since a
+   * version the server would reject must not be offered: on a completed document
+   * the original is limited to ADMIN/SGC even while the window is open.
    */
   const getVersionOptions = (
     envelope: EnvelopeBulkDownloadItem,
   ): { value: BulkDownloadVersion; label: string }[] | null => {
+    let versionOptions: { value: BulkDownloadVersion; label: string }[];
+
     if (envelope.status === DocumentStatus.COMPLETED) {
-      return [
+      versionOptions = [
         { value: 'signed', label: t({ message: 'Signed', context: 'Signed document (adjective)' }) },
         { value: 'original', label: t({ message: 'Original', context: 'Original document (adjective)' }) },
       ];
-    }
-
-    if (envelope.status === DocumentStatus.PENDING && !envelope.isLegacy) {
-      return [
+    } else if (envelope.status === DocumentStatus.PENDING && !envelope.isLegacy) {
+      versionOptions = [
         { value: 'pending', label: t({ message: 'Partial', context: 'Partially signed document (adjective)' }) },
         { value: 'original', label: t({ message: 'Original', context: 'Original document (adjective)' }) },
       ];
+    } else {
+      return null;
     }
 
-    return null;
+    const downloadPolicy = downloadPoliciesById.get(envelope.id);
+
+    // Until the batch resolves the policy, keep every version selectable so the
+    // dialog behaves as it did before the policy was known.
+    if (!downloadPolicy) {
+      return versionOptions;
+    }
+
+    const availableVersionOptions = versionOptions.filter((option) =>
+      option.value === 'original' ? downloadPolicy.canDownloadOriginal : downloadPolicy.canDownloadSigned,
+    );
+
+    return availableVersionOptions.length > 0 ? availableVersionOptions : null;
   };
 
   const getStatusLabel = (status: DocumentStatus) =>

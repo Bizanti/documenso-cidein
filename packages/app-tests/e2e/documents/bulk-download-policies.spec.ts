@@ -192,3 +192,46 @@ test('[BULK_DOWNLOAD]: documents past their download window are skipped and repo
   await expectToastTextToBeVisible(page, 'Documents partially downloaded');
   await expectToastTextToBeVisible(page, '1 document was skipped because its download window has expired.');
 });
+
+test('[BULK_DOWNLOAD]: versions the policy blocks are not offered for a document', async ({ page }) => {
+  const { owner, team } = await seedTeam();
+  const { user: signer } = await seedUser();
+
+  const document = await seedCompletedDocumentWithWindow({
+    owner,
+    signer,
+    teamId: team.id,
+    title: '[TEST] Bulk download partially locked document',
+    completedHoursAgo: 1,
+    downloadWindowHours: EXPIRED_WINDOW_HOURS,
+  });
+
+  const manager = await seedTeamMember({
+    teamId: team.id,
+    name: 'Bulk download signed only manager',
+    role: TeamMemberRole.MANAGER,
+  });
+
+  await apiSignin({
+    page,
+    email: manager.email,
+    redirectPath: `/t/${team.url}/documents`,
+  });
+
+  await selectDocument(page, document.title);
+
+  await openBulkDownloadDialog(page);
+
+  const dialog = page.getByRole('dialog');
+
+  await expect(dialog.getByText(document.title)).toBeVisible();
+
+  // The window is still open, so the signed copy stays available...
+  await expect(dialog.getByRole('radio', { name: 'Signed' })).toBeVisible();
+
+  // ...but the original of a completed document is limited to ADMIN and SGC, so
+  // offering it would only produce a failed download.
+  await expect(dialog.getByRole('radio', { name: 'Original' })).toHaveCount(0);
+
+  await expect(dialog.getByTestId('bulk-download-locked-document')).toHaveCount(0);
+});

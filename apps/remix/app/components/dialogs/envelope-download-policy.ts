@@ -21,13 +21,33 @@ export type EnvelopeDownloadPolicyRequest = {
 
 export type EnvelopeDownloadPolicies = Map<string, TEnvelopeDownloadPolicy>;
 
+/**
+ * The download policies the page resolved, plus what the batch covered.
+ *
+ * The covered requests are known before the batch resolves, which is what keeps
+ * a row from resolving its own policy while the page request is still in flight.
+ */
+export type EnvelopeDownloadPoliciesContextValue = {
+  policies: EnvelopeDownloadPolicies;
+
+  /**
+   * Whether the page batch asked for the policy of this envelope and token.
+   */
+  covers: (envelopeId: string, token?: string) => boolean;
+
+  /**
+   * Whether the batch is still resolving.
+   */
+  isLoading: boolean;
+};
+
 const getEnvelopeDownloadPolicyKey = (envelopeId: string, token?: string) => `${envelopeId}|${token ?? ''}`;
 
 /**
- * The download policies already resolved by the page, so each row of a table
- * does not have to resolve its own.
+ * The page level batch: the policies it resolved plus what it covered, so the
+ * rows of a table don't resolve their own while the batch is in flight.
  */
-export const EnvelopeDownloadPoliciesContext = createContext<EnvelopeDownloadPolicies | null>(null);
+export const EnvelopeDownloadPoliciesContext = createContext<EnvelopeDownloadPoliciesContextValue | null>(null);
 
 /**
  * Builds the batch requests for a page of envelopes, using the same recipient
@@ -61,7 +81,7 @@ export const useEnvelopeDownloadPolicies = ({
 }: {
   requests: EnvelopeDownloadPolicyRequest[];
   enabled?: boolean;
-}): EnvelopeDownloadPolicies => {
+}): EnvelopeDownloadPoliciesContextValue => {
   const batchedRequests = useMemo(() => {
     const uniqueRequests = new Map<string, EnvelopeDownloadPolicyRequest>();
 
@@ -82,13 +102,15 @@ export const useEnvelopeDownloadPolicies = ({
     new Set(batchedRequests.map((request) => request.token).filter((token): token is string => token !== undefined)),
   );
 
-  const { data } = trpc.document.getEnvelopeDownloadPolicies.useQuery(
+  const isBatchEnabled = enabled && envelopeIds.length > 0;
+
+  const { data, isLoading } = trpc.document.getEnvelopeDownloadPolicies.useQuery(
     {
       envelopeIds,
       ...(tokens.length > 0 ? { tokens } : {}),
     },
     {
-      enabled: enabled && envelopeIds.length > 0,
+      enabled: isBatchEnabled,
     },
   );
 
@@ -112,8 +134,17 @@ export const useEnvelopeDownloadPolicies = ({
       }
     });
 
-    return policies;
-  }, [batchedRequests, data]);
+    const coveredKeys = new Set(requestKeyByEnvelopeId.values());
+
+    return {
+      policies,
+      // A row only holds its own query back while the batch is actually there to
+      // answer it, so a disabled batch leaves the rows resolving themselves.
+      covers: (envelopeId: string, token?: string) =>
+        isBatchEnabled && coveredKeys.has(getEnvelopeDownloadPolicyKey(envelopeId, token)),
+      isLoading: isLoading && !data,
+    };
+  }, [batchedRequests, data, isBatchEnabled, isLoading]);
 };
 
 type UseEnvelopeDownloadPolicyOptions = {
@@ -135,10 +166,10 @@ type UseEnvelopeDownloadPolicyResponse = {
  * Resolves what the current viewer may download for an envelope, so download
  * actions can render a locked state instead of failing with a raw 403.
  *
- * Reads the page level batch when it covers this envelope, and falls back to
- * resolving the envelope on its own when the page is not batched, or when it
- * resolved a different variant of the same envelope, such as a team member who
- * is also a recipient of the document.
+ * The page level batch resolves this envelope when it covers it, in which case
+ * the row waits for it instead of resolving the policy on its own. Only a row the
+ * batch did not cover, such as the team variant of an envelope that member is
+ * also a recipient of, falls back to resolving the envelope by itself.
  */
 export const useEnvelopeDownloadPolicy = ({
   envelopeId,
@@ -147,7 +178,11 @@ export const useEnvelopeDownloadPolicy = ({
 }: UseEnvelopeDownloadPolicyOptions): UseEnvelopeDownloadPolicyResponse => {
   const batchedPolicies = useContext(EnvelopeDownloadPoliciesContext);
 
-  const batchedPolicy = batchedPolicies?.get(getEnvelopeDownloadPolicyKey(envelopeId, token));
+  const isCoveredByBatch = batchedPolicies?.covers(envelopeId, token) ?? false;
+
+  const batchedPolicy = isCoveredByBatch
+    ? batchedPolicies?.policies.get(getEnvelopeDownloadPolicyKey(envelopeId, token))
+    : undefined;
 
   const { data, isLoading } = trpc.document.getEnvelopeDownloadPolicies.useQuery(
     {
@@ -155,12 +190,14 @@ export const useEnvelopeDownloadPolicy = ({
       token,
     },
     {
-      enabled: enabled && !batchedPolicy,
+      // Held back while the batch covers this row, so a page never resolves one
+      // policy per row on top of its own request.
+      enabled: enabled && !isCoveredByBatch,
     },
   );
 
   return {
     downloadPolicy: batchedPolicy ?? data?.data[0],
-    isLoadingDownloadPolicy: !batchedPolicy && isLoading && !data,
+    isLoadingDownloadPolicy: isCoveredByBatch ? (batchedPolicies?.isLoading ?? false) : isLoading && !data,
   };
 };

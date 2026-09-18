@@ -22,9 +22,9 @@ export const EnvelopeDownloadPolicyProvider = ({
   enabled,
   children,
 }: EnvelopeDownloadPolicyProviderProps) => {
-  const policies = useEnvelopeDownloadPolicies({ requests, enabled });
+  const contextValue = useEnvelopeDownloadPolicies({ requests, enabled });
 
   return (
-    <EnvelopeDownloadPoliciesContext.Provider value={policies}>{children}</EnvelopeDownloadPoliciesContext.Provider>
+    <EnvelopeDownloadPoliciesContext.Provider value={contextValue}>{children}</EnvelopeDownloadPoliciesContext.Provider>
   );
 };
