@@ -122,7 +122,7 @@ msgstr "{0, plural, other {已取消 # 份文档。}} {1, plural, other {有 # �
 
 #. placeholder {0}: successfulEnvelopeIds.length
 #: apps/remix/app/components/dialogs/envelopes-bulk-download-dialog.tsx
-msgid "{0, plural, one {# document downloaded.} other {# documents downloaded.}} {failedDownloads, plural, one {# document could not be downloaded.} other {# documents could not be downloaded.}}"
+msgid "{0, plural, one {# document downloaded.} other {# documents downloaded.}}"
 msgstr ""
 
 #. placeholder {0}: result.cancelledCount
@@ -269,6 +269,11 @@ msgstr "{0, plural, other {选择一个文件夹，将 # 个已选模板移动�
 msgid "{0, plural, one {Select the version to download for the selected document.} other {Select the version to download for each of the # selected documents.}}"
 msgstr ""
 
+#. placeholder {0}: lockedEnvelopes.length
+#: apps/remix/app/components/dialogs/envelopes-bulk-download-dialog.tsx
+msgid "{0, plural, one {The download window of # document has expired, so it will be left out of the download. Only team administrators and the SGC role can download it.} other {The download window of # documents has expired, so they will be left out of the download. Only team administrators and the SGC role can download them.}}"
+msgstr ""
+
 #. placeholder {0}: pendingRecipients.length
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/documents.$id._index.tsx
 msgid "{0, plural, one {Waiting on 1 recipient} other {Waiting on # recipients}}"
@@ -400,6 +405,10 @@ msgstr "{charactersRemaining, plural, other {{charactersRemaining} 个字符剩�
 msgid "{expiresInMinutes, plural, one {This code will expire in # minute.} other {This code will expire in # minutes.}}"
 msgstr "{expiresInMinutes, plural, other {此代码将在 # 分钟后过期。}}"
 
+#: apps/remix/app/components/dialogs/envelopes-bulk-download-dialog.tsx
+msgid "{failedDownloads, plural, one {# document could not be downloaded.} other {# documents could not be downloaded.}}"
+msgstr ""
+
 #: packages/email/templates/document-invite.tsx
 msgid "{inviterName} <0>({inviterEmail})</0>"
 msgstr "{inviterName} <0>（{inviterEmail}）</0>"
@@ -529,6 +538,10 @@ msgstr ""
 #: packages/email/template-components/template-document-rejected.tsx
 msgid "{signerName} has rejected the document \"{documentName}\"."
 msgstr "{signerName} 已拒签文档“{documentName}”。"
+
+#: apps/remix/app/components/dialogs/envelopes-bulk-download-dialog.tsx
+msgid "{skippedDownloads, plural, one {# document was skipped because its download window has expired.} other {# documents were skipped because their download window has expired.}}"
+msgstr ""
 
 #: apps/remix/app/components/dialogs/email-transport-delete-dialog.tsx
 msgid "{subscriptionClaimCount, plural, one {# Subscription claim} other {# Subscription claims}}"
@@ -4968,6 +4981,7 @@ msgstr "下载模板 CSV"
 msgid "Download version for {0}"
 msgstr ""
 
+#: apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx
 #: packages/ui/primitives/document-flow/add-settings.tsx
 #: packages/ui/primitives/template-flow/add-template-settings.tsx
 msgid "Download window"
@@ -4981,7 +4995,7 @@ msgstr ""
 msgid "Download Window Updated"
 msgstr ""
 
-#. placeholder {0}: envelopes.length
+#. placeholder {0}: downloadableEnvelopes.length
 #: apps/remix/app/components/dialogs/envelopes-bulk-download-dialog.tsx
 msgid "Downloading {progress} / {0}..."
 msgstr ""
@@ -5338,6 +5352,10 @@ msgstr "邮件发件人"
 #: apps/remix/app/components/general/organisations/organisation-quota-banner.tsx
 msgid "Email sending has been temporarily paused"
 msgstr "电子邮件发送已被暂时暂停"
+
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "Email sending is disabled for this organisation, so no email was sent."
+msgstr ""
 
 #: packages/lib/utils/document-audit-logs.ts
 msgctxt "Audit log format"
@@ -6561,6 +6579,7 @@ msgstr "水平"
 msgid "Host"
 msgstr "主机"
 
+#: apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx
 #: packages/ui/primitives/document-flow/add-settings.tsx
 #: packages/ui/primitives/template-flow/add-template-settings.tsx
 msgid "Hours. Leave empty to use the global download window."
@@ -6574,6 +6593,7 @@ msgstr ""
 msgid "How long recipients have to complete this document after it is sent. Uses the team default when set to inherit."
 msgstr "设置此文档在发送后，收件人可完成签署的时间长度。当设置为继承时，将使用团队默认值。"
 
+#: apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx
 #: packages/ui/primitives/document-flow/add-settings.tsx
 msgid "How long the document can be downloaded after it is completed. Only administrators and the SGC role can download it afterwards."
 msgstr ""
@@ -7841,6 +7861,10 @@ msgstr "未找到符合条件的组织。目标组织必须使用免费方案。
 msgid "No email detected"
 msgstr "未检测到电子邮件"
 
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "No email was sent. Please try again or contact support."
+msgstr ""
+
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains.$id.tsx
 msgid "No emails configured for this domain."
 msgstr "此域名尚未配置任何电子邮件。"
@@ -8035,6 +8059,10 @@ msgstr "无"
 #: packages/lib/constants/document-auth.ts
 msgid "None (Overrides global settings)"
 msgstr "无（覆盖全局设置）"
+
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "None of the selected recipients has an email address the document can be delivered to, so no email was sent."
+msgstr ""
 
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/documents.$id._index.tsx
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/documents.$id.edit.tsx
@@ -10743,6 +10771,10 @@ msgid "Signed document"
 msgstr ""
 
 #: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "Signed document not sent"
+msgstr ""
+
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
 msgid "Signed document resent"
 msgstr ""
 
@@ -11900,6 +11932,7 @@ msgid "The download window for this document has expired. Contact the sender to 
 msgstr ""
 
 #: apps/remix/app/components/dialogs/envelope-download-dialog.tsx
+#: apps/remix/app/components/dialogs/envelopes-bulk-download-dialog.tsx
 msgid "The download window for this document has expired. Only team administrators and the SGC role can download it."
 msgstr ""
 
@@ -11907,6 +11940,7 @@ msgstr ""
 msgid "The download window has been updated successfully."
 msgstr ""
 
+#: apps/remix/app/components/dialogs/envelopes-bulk-download-dialog.tsx
 #: apps/remix/app/components/general/document/document-page-view-dropdown.tsx
 #: apps/remix/app/components/tables/documents-table-action-dropdown.tsx
 msgid "The download window has expired"
