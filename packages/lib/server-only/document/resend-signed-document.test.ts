@@ -46,7 +46,12 @@ vi.mock('../rate-limit/assert-organisation-rates-and-limits', () => ({
 vi.mock('../team/get-team', () => ({ getTeamById: mocks.getTeamById }));
 vi.mock('../team/get-team-members', () => ({ getTeamMembers: mocks.getTeamMembers }));
 
-const teamMember = (email: string, teamRole: TeamMemberRole, name: string | null = null) => ({
+const teamMember = (
+  email: string,
+  teamRole: TeamMemberRole,
+  name: string | null = null,
+  organisationRole: OrganisationMemberRole = OrganisationMemberRole.MEMBER,
+) => ({
   id: `org_member_${email}`,
   userId: 1,
   createdAt: new Date(),
@@ -54,7 +59,7 @@ const teamMember = (email: string, teamRole: TeamMemberRole, name: string | null
   name,
   avatarImageId: null,
   teamRole,
-  organisationRole: OrganisationMemberRole.MEMBER,
+  organisationRole,
 });
 
 const requestMetadata: ApiRequestMetadata = {
@@ -173,6 +178,51 @@ describe('getSignedDocumentResendCc', () => {
 
     expect(cc).toEqual([]);
   });
+
+  it('copies the organisation members holding the SGC role', () => {
+    const cc = getSignedDocumentResendCc({
+      teamMembers: [
+        teamMember('team-sgc@example.com', TeamMemberRole.SGC, 'Team SGC'),
+        teamMember('org-sgc@example.com', TeamMemberRole.MEMBER, 'Organisation SGC', OrganisationMemberRole.SGC),
+        teamMember(
+          'org-manager@example.com',
+          TeamMemberRole.MEMBER,
+          'Organisation Manager',
+          OrganisationMemberRole.MANAGER,
+        ),
+      ],
+      recipientEmails: ['signer@example.com'],
+    });
+
+    expect(cc).toEqual([
+      { address: 'team-sgc@example.com', name: 'Team SGC' },
+      { address: 'org-sgc@example.com', name: 'Organisation SGC' },
+    ]);
+  });
+
+  it('de-duplicates an address that holds both the team and the organisation SGC role', () => {
+    const cc = getSignedDocumentResendCc({
+      teamMembers: [
+        teamMember('sgc@example.com', TeamMemberRole.SGC),
+        teamMember('sgc@example.com', TeamMemberRole.MEMBER, null, OrganisationMemberRole.SGC),
+      ],
+      recipientEmails: [],
+    });
+
+    expect(cc).toHaveLength(1);
+  });
+
+  it('does not copy organisation admins and managers', () => {
+    const cc = getSignedDocumentResendCc({
+      teamMembers: [
+        teamMember('org-admin@example.com', TeamMemberRole.MEMBER, null, OrganisationMemberRole.ADMIN),
+        teamMember('org-manager@example.com', TeamMemberRole.MEMBER, null, OrganisationMemberRole.MANAGER),
+      ],
+      recipientEmails: [],
+    });
+
+    expect(cc).toEqual([]);
+  });
 });
 
 describe('getResendSignedDocumentSkipReason', () => {
@@ -252,6 +302,20 @@ describe('resendSignedDocument', () => {
 
     expect(mocks.sendMail).not.toHaveBeenCalled();
     expect(mocks.prisma.documentAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('copies the organisation SGC members on the delivery', async () => {
+    mocks.getTeamMembers.mockResolvedValue([
+      teamMember('org-sgc@example.com', TeamMemberRole.MEMBER, 'Organisation SGC', OrganisationMemberRole.SGC),
+    ]);
+
+    const result = await resendSignedDocument(resendOptions);
+
+    expect(result).toEqual({ sent: true });
+
+    expect(mocks.sendMail.mock.calls[0][0]).toMatchObject({
+      cc: [{ address: 'org-sgc@example.com', name: 'Organisation SGC' }],
+    });
   });
 
   it('sends the document and logs the delivery when emails are enabled', async () => {
