@@ -9,6 +9,7 @@ import {
   LOWEST_ORGANISATION_ROLE,
   ORGANISATION_MEMBER_ROLE_HIERARCHY,
   ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP,
+  ORGANISATION_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES,
 } from '../constants/organisations';
 import { DEFAULT_DOCUMENT_EMAIL_SETTINGS } from '../types/document-email';
 
@@ -60,6 +61,17 @@ export const getHighestOrganisationRoleInGroup = (
   });
 
   return highestOrganisationRole;
+};
+
+/**
+ * Determines whether an organisation role holds the SGC download privileges
+ * (ORGANISATION_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES).
+ *
+ * Used by download policies so an organisation member holding the SGC role gets
+ * the same privileges as a team SGC member across the organisation.
+ */
+export const hasOrganisationSgcDownloadPrivileges = (role: OrganisationMemberRole) => {
+  return ORGANISATION_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES.some((i) => i === role);
 };
 
 type BuildOrganisationWhereQueryOptions = {

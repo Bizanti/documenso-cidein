@@ -941,6 +941,7 @@ enum OrganisationGroupType {
 
 enum OrganisationMemberRole {
   ADMIN
+  SGC
   MANAGER
   MEMBER
 }

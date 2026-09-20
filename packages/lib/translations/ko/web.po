@@ -3306,6 +3306,10 @@ msgctxt "Recipient role plural name"
 msgid "Controlled signers"
 msgstr ""
 
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "Controlled signers do not receive a copy of the signed document."
+msgstr ""
+
 #: apps/remix/app/components/forms/reminder-preferences-form.tsx
 msgid "Controls how long recipients have to complete signing before the document expires. After expiration, recipients can no longer sign the document."
 msgstr "수신자가 문서가 만료되기 전에 서명을 완료할 수 있는 기간을 제어합니다. 만료 후에는 수신자가 더 이상 이 문서에 서명할 수 없습니다."
@@ -7961,6 +7965,10 @@ msgstr "이 설명과 일치하는 수신자를 찾을 수 없습니다."
 msgid "No recipients"
 msgstr "수신자 없음"
 
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "No recipients can receive the completed document"
+msgstr ""
+
 #: apps/remix/app/components/dialogs/ai-recipient-detection-dialog.tsx
 msgid "No recipients were detected in your document."
 msgstr "문서에서 감지된 수신자가 없습니다."
@@ -8366,6 +8374,10 @@ msgstr "조직 역할"
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings._layout.tsx
 msgid "Organisation Settings"
 msgstr "조직 설정"
+
+#: packages/lib/constants/organisations-translations.ts
+msgid "Organisation SGC"
+msgstr ""
 
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.sso.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.sso.tsx
@@ -10528,6 +10540,10 @@ msgstr "설정"
 msgid "Setup"
 msgstr "설정"
 
+#: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/routes/_authenticated+/admin+/organisations.$id.tsx
+#: packages/lib/constants/organisations-translations.ts
 #: packages/lib/constants/teams-translations.ts
 msgid "SGC"
 msgstr ""
@@ -15062,7 +15078,8 @@ msgstr "' {deleteMessage}'를 입력해야 계속 진행할 수 있습니다"
 msgid "You must select at least one item"
 msgstr "최소 한 개의 항목을 선택해야 합니다"
 
-#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+#: packages/lib/types/document-resend-signed.test.ts
+#: packages/lib/types/document-resend-signed.ts
 msgid "You must select at least one recipient"
 msgstr ""
 

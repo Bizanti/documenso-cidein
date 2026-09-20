@@ -3306,6 +3306,10 @@ msgctxt "Recipient role plural name"
 msgid "Controlled signers"
 msgstr ""
 
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "Controlled signers do not receive a copy of the signed document."
+msgstr ""
+
 #: apps/remix/app/components/forms/reminder-preferences-form.tsx
 msgid "Controls how long recipients have to complete signing before the document expires. After expiration, recipients can no longer sign the document."
 msgstr "Określa, ile czasu mają odbiorcy na podpisanie dokumentu przed jego wygaśnięciem. Po tym czasie odbiorcy nie będą mogli już podpisać dokumentu."
@@ -7961,6 +7965,10 @@ msgstr "Nie znaleziono odbiorcy pasującego do tego opisu."
 msgid "No recipients"
 msgstr "Brak odbiorców"
 
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "No recipients can receive the completed document"
+msgstr ""
+
 #: apps/remix/app/components/dialogs/ai-recipient-detection-dialog.tsx
 msgid "No recipients were detected in your document."
 msgstr "Nie wykryto żadnych odbiorców."
@@ -8366,6 +8374,10 @@ msgstr "Rola w organizacji"
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings._layout.tsx
 msgid "Organisation Settings"
 msgstr "Ustawienia organizacji"
+
+#: packages/lib/constants/organisations-translations.ts
+msgid "Organisation SGC"
+msgstr ""
 
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.sso.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.sso.tsx
@@ -10528,6 +10540,10 @@ msgstr "Ustawienia"
 msgid "Setup"
 msgstr "Konfiguracja"
 
+#: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/routes/_authenticated+/admin+/organisations.$id.tsx
+#: packages/lib/constants/organisations-translations.ts
 #: packages/lib/constants/teams-translations.ts
 msgid "SGC"
 msgstr ""
@@ -15062,7 +15078,8 @@ msgstr "Wpisz „{deleteMessage}”, aby kontynuować"
 msgid "You must select at least one item"
 msgstr "Wybierz co najmniej jednego odbiorcę"
 
-#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+#: packages/lib/types/document-resend-signed.test.ts
+#: packages/lib/types/document-resend-signed.ts
 msgid "You must select at least one recipient"
 msgstr ""
 

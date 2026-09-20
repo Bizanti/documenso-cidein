@@ -3,7 +3,7 @@ import { prisma } from '@documenso/prisma';
 import type { TResendSignedDocumentSkipReason } from '@documenso/trpc/server/document-router/resend-signed-document.types';
 import type { TGetTeamMembersResponse } from '@documenso/trpc/server/team-router/get-team-members.types';
 import { msg } from '@lingui/core/macro';
-import { DocumentStatus, EnvelopeType, TeamMemberRole } from '@prisma/client';
+import { DocumentStatus, EnvelopeType, OrganisationMemberRole, TeamMemberRole } from '@prisma/client';
 import { createElement } from 'react';
 
 import { getI18nInstance } from '../../client-only/providers/i18n-server';
@@ -89,8 +89,9 @@ export const getResendSignedDocumentSkipReason = ({
 };
 
 /**
- * The copy list for a signed document delivery: the team members holding the SGC
- * role, minus anyone that already receives the email directly.
+ * The copy list for a signed document delivery: the members holding the SGC role
+ * in the team or in the organisation that owns it, minus anyone that already
+ * receives the email directly.
  */
 export const getSignedDocumentResendCc = ({
   teamMembers,
@@ -101,7 +102,9 @@ export const getSignedDocumentResendCc = ({
   const seen = new Set<string>();
 
   return teamMembers
-    .filter((member) => member.teamRole === TeamMemberRole.SGC)
+    .filter(
+      (member) => member.teamRole === TeamMemberRole.SGC || member.organisationRole === OrganisationMemberRole.SGC,
+    )
     .filter((member) => {
       const email = member.email.toLowerCase();
 
@@ -123,9 +126,9 @@ export const getSignedDocumentResendCc = ({
  * Delivers the signed document to the given recipients again, logging the new
  * delivery on the document audit log.
  *
- * Team members holding the SGC download privileges (ADMIN/SGC) are copied on the
- * email, so the quality management team keeps a record of every delivery of a
- * signed document.
+ * Members holding the SGC role in the team or in the organisation that owns it
+ * are copied on the email, so the quality management team keeps a record of every
+ * delivery of a signed document.
  *
  * The result reports whether any email was actually sent, so a resend that
  * delivered nothing is never announced as a success.
