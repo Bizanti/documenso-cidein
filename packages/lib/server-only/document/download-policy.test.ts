@@ -1,7 +1,8 @@
-import { DocumentStatus, TeamMemberRole } from '@prisma/client';
+import { DocumentStatus, OrganisationMemberRole, TeamMemberRole } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
+import { getMemberOrganisationRole } from '../team/get-member-roles';
 import { getTeamById } from '../team/get-team';
 import {
   buildEnvelopeDownloadPolicy,
@@ -17,6 +18,7 @@ import {
 } from './download-policy';
 
 vi.mock('../site-settings/get-download-window-hours');
+vi.mock('../team/get-member-roles');
 vi.mock('../team/get-team');
 
 const HOUR_IN_MS = 60 * 60 * 1000;
@@ -274,10 +276,16 @@ describe('getUserDownloadPolicy', () => {
     vi.resetAllMocks();
   });
 
-  const mockTeamRole = (role: TeamMemberRole) => {
+  const mockTeamRole = (
+    role: TeamMemberRole,
+    organisationRole: OrganisationMemberRole = OrganisationMemberRole.MEMBER,
+  ) => {
     vi.mocked(getTeamById).mockResolvedValue({
       currentTeamRole: role,
+      organisationId: 'organisation_1',
     } as unknown as Awaited<ReturnType<typeof getTeamById>>);
+
+    vi.mocked(getMemberOrganisationRole).mockResolvedValue(organisationRole);
   };
 
   it('keeps the original and post-window access for ADMIN and SGC', async () => {
@@ -298,6 +306,90 @@ describe('getUserDownloadPolicy', () => {
       isSgcPrivileged: true,
       canDownloadSigned: true,
       canDownloadOriginal: true,
+    });
+  });
+
+  it('keeps the original and post-window access for an organisation SGC member with a lower team role', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.MEMBER, OrganisationMemberRole.SGC);
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(policy).toMatchObject({
+      isDownloadWindowExpired: true,
+      isSgcPrivileged: true,
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+    });
+  });
+
+  it('keeps the original and post-window access for an organisation admin', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.MEMBER, OrganisationMemberRole.ADMIN);
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(policy).toMatchObject({
+      isSgcPrivileged: true,
+      canDownloadSigned: true,
+      canDownloadOriginal: true,
+    });
+  });
+
+  it('restricts organisation managers and members without the SGC privileges', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    for (const organisationRole of [OrganisationMemberRole.MANAGER, OrganisationMemberRole.MEMBER]) {
+      mockTeamRole(TeamMemberRole.MEMBER, organisationRole);
+
+      const policy = await getUserDownloadPolicy({
+        userId: 1,
+        teamId: 1,
+        status: DocumentStatus.COMPLETED,
+        completedAt,
+        now: hoursAfter(completedAt, 49),
+      });
+
+      expect(policy).toMatchObject({
+        isSgcPrivileged: false,
+        canDownloadSigned: false,
+        canDownloadOriginal: false,
+      });
+    }
+  });
+
+  it('treats users without an organisation role as non privileged', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(1);
+
+    mockTeamRole(TeamMemberRole.MEMBER);
+    vi.mocked(getMemberOrganisationRole).mockRejectedValue(new Error('Roles not found'));
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+      now: hoursAfter(completedAt, 49),
+    });
+
+    expect(policy).toMatchObject({
+      isSgcPrivileged: false,
+      canDownloadSigned: false,
+      canDownloadOriginal: false,
     });
   });
 

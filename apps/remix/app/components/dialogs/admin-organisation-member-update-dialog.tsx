@@ -32,7 +32,7 @@ export type AdminOrganisationMemberUpdateDialogProps = {
 } & Omit<DialogPrimitive.DialogProps, 'children'>;
 
 const ZUpdateOrganisationMemberFormSchema = z.object({
-  role: z.enum(['OWNER', 'ADMIN', 'MANAGER', 'MEMBER']),
+  role: z.enum(['OWNER', 'ADMIN', 'SGC', 'MANAGER', 'MEMBER']),
 });
 
 type ZUpdateOrganisationMemberSchema = z.infer<typeof ZUpdateOrganisationMemberFormSchema>;
@@ -76,6 +76,7 @@ export const AdminOrganisationMemberUpdateDialog = ({
       const roleLabel = match(role)
         .with('OWNER', () => t`Owner`)
         .with(OrganisationMemberRole.ADMIN, () => t`Admin`)
+        .with(OrganisationMemberRole.SGC, () => t`SGC`)
         .with(OrganisationMemberRole.MANAGER, () => t`Manager`)
         .with(OrganisationMemberRole.MEMBER, () => t`Member`)
         .exhaustive();
@@ -161,6 +162,9 @@ export const AdminOrganisationMemberUpdateDialog = ({
                           </SelectItem>
                           <SelectItem value={OrganisationMemberRole.ADMIN}>
                             <Trans>Admin</Trans>
+                          </SelectItem>
+                          <SelectItem value={OrganisationMemberRole.SGC}>
+                            <Trans>SGC</Trans>
                           </SelectItem>
                           <SelectItem value={OrganisationMemberRole.MANAGER}>
                             <Trans>Manager</Trans>
