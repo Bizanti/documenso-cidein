@@ -3,7 +3,7 @@ import { seedCompletedDocument, seedPendingDocument } from '@documenso/prisma/se
 import { seedTeam, seedTeamMember } from '@documenso/prisma/seed/teams';
 import { seedUser } from '@documenso/prisma/seed/users';
 import { expect, type Page, test } from '@playwright/test';
-import { TeamMemberRole } from '@prisma/client';
+import { RecipientRole, TeamMemberRole } from '@prisma/client';
 
 import { apiSignin } from '../fixtures/authentication';
 import { expectToastTextToBeVisible, openDropdownMenu } from '../fixtures/generic';
@@ -275,4 +275,66 @@ test('[RESEND SIGNED]: nothing is sent and the user is told when the organisatio
   const messages = await getMailboxMessages(recipient.email);
 
   expect(messages).toHaveLength(0);
+});
+
+test('[RESEND SIGNED]: the rejection message is translated instead of showing the raw Lingui id', async ({ page }) => {
+  const { owner, team, document } = await seedSignedDocument();
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/documents`,
+  });
+
+  const row = page.locator('tr', { hasText: document.title });
+
+  await openDropdownMenu(page, row.getByTestId('document-table-action-btn'));
+
+  await page.getByTestId('document-resend-signed-action').click();
+
+  await expect(page.getByRole('heading', { name: 'Resend Signed Document' })).toBeVisible();
+
+  // Sending with nothing selected is rejected.
+  await page.getByTestId('resend-signed-submit').click();
+
+  await expect(page.getByText('You must select at least one recipient')).toBeVisible();
+
+  // The user never sees the Lingui message id that backs the validation message.
+  await expect(page.getByText('Xkxw3d')).toHaveCount(0);
+});
+
+test('[RESEND SIGNED]: a document that only has controlled signers cannot be resent to anyone', async ({ page }) => {
+  const { owner, team, document, recipient } = await seedSignedDocument();
+
+  // Controlled signers never receive a copy of the completed document.
+  await prisma.recipient.update({
+    where: {
+      id: recipient.id,
+    },
+    data: {
+      role: RecipientRole.CONTROLLED_SIGNER,
+    },
+  });
+
+  await apiSignin({
+    page,
+    email: owner.email,
+    redirectPath: `/t/${team.url}/documents`,
+  });
+
+  const row = page.locator('tr', { hasText: document.title });
+
+  await openDropdownMenu(page, row.getByTestId('document-table-action-btn'));
+
+  await page.getByTestId('document-resend-signed-action').click();
+
+  await expect(page.getByRole('heading', { name: 'Resend Signed Document' })).toBeVisible();
+
+  // The dialog explains the situation instead of showing an empty list.
+  await expect(page.getByTestId('resend-signed-empty-state')).toBeVisible();
+  await expect(page.getByText('No recipients can receive the completed document')).toBeVisible();
+
+  // And nothing can be sent.
+  await expect(page.getByTestId('resend-signed-submit')).toBeDisabled();
+  await expect(page.getByTestId(`resend-signed-recipient-${recipient.id}`)).toHaveCount(0);
 });

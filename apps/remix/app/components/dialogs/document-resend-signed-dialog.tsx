@@ -1,8 +1,12 @@
 import { getRecipientType } from '@documenso/lib/client-only/recipient-type';
 import { AppError } from '@documenso/lib/errors/app-error';
+import {
+  getRecipientsThatReceiveCompletedDocument,
+  type TDocumentResendSignedFormSchema,
+  ZDocumentResendSignedFormSchema,
+} from '@documenso/lib/types/document-resend-signed';
 import type { TEnvelopeRecipientLite } from '@documenso/lib/types/recipient';
 import { recipientAbbreviation } from '@documenso/lib/utils/recipient-formatter';
-import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { trpc as trpcReact } from '@documenso/trpc/react';
 import type { TResendSignedDocumentSkipReason } from '@documenso/trpc/server/document-router/resend-signed-document.types';
 import { cn } from '@documenso/ui/lib/utils';
@@ -18,7 +22,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@documenso/ui/primitives/dialog';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@documenso/ui/primitives/form/form';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@documenso/ui/primitives/form/form';
 import { Textarea } from '@documenso/ui/primitives/textarea';
 import { useToast } from '@documenso/ui/primitives/use-toast';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -27,7 +39,6 @@ import { msg } from '@lingui/core/macro';
 import { Trans, useLingui } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import * as z from 'zod';
 
 import { StackAvatar } from '../general/stack-avatar';
 
@@ -36,15 +47,6 @@ export type DocumentResendSignedDialogProps = {
   recipients: TEnvelopeRecipientLite[];
   trigger?: React.ReactNode;
 };
-
-export const ZDocumentResendSignedFormSchema = z.object({
-  recipients: z.array(z.number()).min(1, {
-    message: msg`You must select at least one recipient`.id,
-  }),
-  message: z.string().max(5000).optional(),
-});
-
-export type TDocumentResendSignedFormSchema = z.infer<typeof ZDocumentResendSignedFormSchema>;
 
 /**
  * Why the server did not send the signed document, ready to be shown to the user.
@@ -68,6 +70,9 @@ const getNotSentDescription = (reason?: TResendSignedDocumentSkipReason): Messag
  * copies in the team members holding the SGC role.
  *
  * The dialog only announces a resend when an email was actually sent.
+ *
+ * Recipients that never receive the completed document (controlled signers) are
+ * not offered, and the dialog explains instead of showing an empty list.
  */
 export const DocumentResendSignedDialog = ({ documentId, recipients, trigger }: DocumentResendSignedDialogProps) => {
   const { toast } = useToast();
@@ -94,9 +99,9 @@ export const DocumentResendSignedDialog = ({ documentId, recipients, trigger }: 
 
   // Recipients the signed document may be delivered to. Controlled signers never
   // receive the completed document.
-  const selectableRecipients = recipients.filter(
-    (recipient) => getRecipientRoleCapabilities(recipient.role).receivesCompletedPdf,
-  );
+  const selectableRecipients = getRecipientsThatReceiveCompletedDocument(recipients);
+
+  const hasSelectableRecipients = selectableRecipients.length > 0;
 
   const onFormSubmit = async ({ recipients, message }: TDocumentResendSignedFormSchema) => {
     try {
@@ -169,37 +174,49 @@ export const DocumentResendSignedDialog = ({ documentId, recipients, trigger }: 
                 name="recipients"
                 render={({ field: { value, onChange }, fieldState: { error } }) => (
                   <FormItem>
-                    {selectableRecipients.map((recipient) => (
-                      <div key={recipient.id} className="flex flex-row items-center justify-between gap-x-3 px-3">
-                        <FormLabel
-                          className={cn('my-2 flex items-center gap-2 font-normal', {
-                            'opacity-50': !value.includes(recipient.id),
-                          })}
-                        >
-                          <StackAvatar
-                            type={getRecipientType(recipient)}
-                            fallbackText={recipientAbbreviation(recipient)}
-                          />
-                          {recipient.email}
-                        </FormLabel>
+                    {hasSelectableRecipients ? (
+                      selectableRecipients.map((recipient) => (
+                        <div key={recipient.id} className="flex flex-row items-center justify-between gap-x-3 px-3">
+                          <FormLabel
+                            className={cn('my-2 flex items-center gap-2 font-normal', {
+                              'opacity-50': !value.includes(recipient.id),
+                            })}
+                          >
+                            <StackAvatar
+                              type={getRecipientType(recipient)}
+                              fallbackText={recipientAbbreviation(recipient)}
+                            />
+                            {recipient.email}
+                          </FormLabel>
 
-                        <FormControl>
-                          <Checkbox
-                            data-testid={`resend-signed-recipient-${recipient.id}`}
-                            className="h-5 w-5 rounded-full"
-                            value={recipient.id}
-                            checked={value.includes(recipient.id)}
-                            onCheckedChange={(checked: boolean) =>
-                              checked
-                                ? onChange([...value, recipient.id])
-                                : onChange(value.filter((id) => id !== recipient.id))
-                            }
-                          />
-                        </FormControl>
+                          <FormControl>
+                            <Checkbox
+                              data-testid={`resend-signed-recipient-${recipient.id}`}
+                              className="h-5 w-5 rounded-full"
+                              value={recipient.id}
+                              checked={value.includes(recipient.id)}
+                              onCheckedChange={(checked: boolean) =>
+                                checked
+                                  ? onChange([...value, recipient.id])
+                                  : onChange(value.filter((id) => id !== recipient.id))
+                              }
+                            />
+                          </FormControl>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex flex-col gap-1 px-3 py-2" data-testid="resend-signed-empty-state">
+                        <p className="font-medium text-sm">
+                          <Trans>No recipients can receive the completed document</Trans>
+                        </p>
+
+                        <p className="text-muted-foreground text-sm">
+                          <Trans>Controlled signers do not receive a copy of the signed document.</Trans>
+                        </p>
                       </div>
-                    ))}
+                    )}
 
-                    {error && <p className="px-3 text-destructive text-sm">{error.message}</p>}
+                    {error && hasSelectableRecipients && <FormMessage className="px-3 text-sm" />}
                   </FormItem>
                 )}
               />
@@ -236,7 +253,12 @@ export const DocumentResendSignedDialog = ({ documentId, recipients, trigger }: 
                   </Button>
                 </DialogClose>
 
-                <Button data-testid="resend-signed-submit" loading={isSubmitting} type="submit">
+                <Button
+                  data-testid="resend-signed-submit"
+                  loading={isSubmitting}
+                  disabled={!hasSelectableRecipients}
+                  type="submit"
+                >
                   <Trans>Send</Trans>
                 </Button>
               </DialogFooter>
