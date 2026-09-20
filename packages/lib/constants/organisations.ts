@@ -12,6 +12,10 @@ export const ORGANISATION_INTERNAL_GROUPS: {
     type: OrganisationGroupType.INTERNAL_ORGANISATION,
   },
   {
+    organisationRole: OrganisationMemberRole.SGC,
+    type: OrganisationGroupType.INTERNAL_ORGANISATION,
+  },
+  {
     organisationRole: OrganisationMemberRole.MANAGER,
     type: OrganisationGroupType.INTERNAL_ORGANISATION,
   },
@@ -20,6 +24,19 @@ export const ORGANISATION_INTERNAL_GROUPS: {
     type: OrganisationGroupType.INTERNAL_ORGANISATION,
   },
 ] as const;
+
+/**
+ * Organisation roles whose members hold SGC (quality management system) download
+ * privileges inside the organisation, such as downloading original documents and
+ * downloading signed documents after the download window has expired.
+ *
+ * The organisation counterpart of TEAM_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES,
+ * consumed by download policies via `hasOrganisationSgcDownloadPrivileges`.
+ */
+export const ORGANISATION_ROLES_WITH_SGC_DOWNLOAD_PRIVILEGES: OrganisationMemberRole[] = [
+  OrganisationMemberRole.ADMIN,
+  OrganisationMemberRole.SGC,
+];
 
 export const ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP = {
   /**
@@ -36,12 +53,21 @@ export const ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP = {
 /**
  * A hierarchy of organisation member roles to determine which role has higher permission than another.
  *
+ * SGC sits between ADMIN and MANAGER, mirroring the team hierarchy: an admin
+ * can invite or update an SGC member, a manager cannot.
+ *
  * Warning: The length of the array is used to determine the priority of the role.
  * See `getHighestOrganisationRoleInGroup`
  */
 export const ORGANISATION_MEMBER_ROLE_HIERARCHY = {
   [OrganisationMemberRole.ADMIN]: [
     OrganisationMemberRole.ADMIN,
+    OrganisationMemberRole.SGC,
+    OrganisationMemberRole.MANAGER,
+    OrganisationMemberRole.MEMBER,
+  ],
+  [OrganisationMemberRole.SGC]: [
+    OrganisationMemberRole.SGC,
     OrganisationMemberRole.MANAGER,
     OrganisationMemberRole.MEMBER,
   ],

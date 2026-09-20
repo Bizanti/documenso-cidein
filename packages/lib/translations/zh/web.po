@@ -3306,6 +3306,10 @@ msgctxt "Recipient role plural name"
 msgid "Controlled signers"
 msgstr ""
 
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "Controlled signers do not receive a copy of the signed document."
+msgstr ""
+
 #: apps/remix/app/components/forms/reminder-preferences-form.tsx
 msgid "Controls how long recipients have to complete signing before the document expires. After expiration, recipients can no longer sign the document."
 msgstr "控制收件人在文档过期前完成签署的时间长度。过期后，收件人将无法再签署该文档。"
@@ -7961,6 +7965,10 @@ msgstr "未找到符合条件的收件人。"
 msgid "No recipients"
 msgstr "无收件人"
 
+#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+msgid "No recipients can receive the completed document"
+msgstr ""
+
 #: apps/remix/app/components/dialogs/ai-recipient-detection-dialog.tsx
 msgid "No recipients were detected in your document."
 msgstr "在您的文档中未检测到任何收件人。"
@@ -8366,6 +8374,10 @@ msgstr "组织角色"
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings._layout.tsx
 msgid "Organisation Settings"
 msgstr "组织设置"
+
+#: packages/lib/constants/organisations-translations.ts
+msgid "Organisation SGC"
+msgstr ""
 
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.sso.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.sso.tsx
@@ -10528,6 +10540,10 @@ msgstr "设置"
 msgid "Setup"
 msgstr "设置"
 
+#: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/routes/_authenticated+/admin+/organisations.$id.tsx
+#: packages/lib/constants/organisations-translations.ts
 #: packages/lib/constants/teams-translations.ts
 msgid "SGC"
 msgstr ""
@@ -15062,7 +15078,8 @@ msgstr "你必须输入“{deleteMessage}”才能继续"
 msgid "You must select at least one item"
 msgstr "您必须至少选择一项"
 
-#: apps/remix/app/components/dialogs/document-resend-signed-dialog.tsx
+#: packages/lib/types/document-resend-signed.test.ts
+#: packages/lib/types/document-resend-signed.ts
 msgid "You must select at least one recipient"
 msgstr ""
 

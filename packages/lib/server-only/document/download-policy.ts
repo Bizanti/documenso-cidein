@@ -2,8 +2,10 @@ import type { TeamMemberRole } from '@prisma/client';
 import { DocumentStatus } from '@prisma/client';
 
 import type { DocumentDataVersion } from '../../types/document';
+import { hasOrganisationSgcDownloadPrivileges } from '../../utils/organisations';
 import { hasSgcDownloadPrivileges } from '../../utils/teams';
 import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
+import { getMemberOrganisationRole } from '../team/get-member-roles';
 import { getTeamById } from '../team/get-team';
 
 export type TDocumentDownloadVersion = 'original' | 'signed' | 'pending';
@@ -94,7 +96,8 @@ export type EnvelopeDownloadPolicy = {
   isDownloadWindowExpired: boolean;
 
   /**
-   * Whether the viewer holds the SGC download privileges (team ADMIN/SGC).
+   * Whether the viewer holds the SGC download privileges (team ADMIN/SGC, or an
+   * organisation SGC/ADMIN role).
    */
   isSgcPrivileged: boolean;
 
@@ -116,6 +119,12 @@ type GetEnvelopeDownloadPolicyOptions = {
    * is treated as non-privileged.
    */
   role?: TeamMemberRole | null;
+
+  /**
+   * Whether the viewer holds the SGC privileges through their organisation role
+   * instead of their team role. Combined with `role`.
+   */
+  isOrganisationSgcPrivileged?: boolean;
   now?: Date;
 };
 
@@ -132,18 +141,21 @@ type BuildEnvelopeDownloadPolicyOptions = Omit<GetEnvelopeDownloadPolicyOptions,
  *
  * Rules:
  * - Once the envelope is final (signed copy exists) the original is restricted to
- *   team ADMIN/SGC. While the envelope is still draft or pending the original is the
- *   only available version, so it stays available to anyone with access.
- * - Past the download window only team ADMIN/SGC may download.
+ *   team ADMIN/SGC and organisation SGC/ADMIN members. While the envelope is still
+ *   draft or pending the original is the only available version, so it stays
+ *   available to anyone with access.
+ * - Past the download window only those privileged viewers may download.
  */
 export const buildEnvelopeDownloadPolicy = ({
   status,
   completedAt,
   windowHours,
   role,
+  isOrganisationSgcPrivileged = false,
   now,
 }: BuildEnvelopeDownloadPolicyOptions): EnvelopeDownloadPolicy => {
-  const isSgcPrivileged = role ? hasSgcDownloadPrivileges(role) : false;
+  const hasTeamSgcPrivileges = role ? hasSgcDownloadPrivileges(role) : false;
+  const isSgcPrivileged = hasTeamSgcPrivileges || isOrganisationSgcPrivileged;
   const hasWindowExpired = isDownloadWindowExpired({
     status,
     completedAt,
@@ -169,6 +181,7 @@ export const getEnvelopeDownloadPolicy = async ({
   completedAt,
   downloadWindowHours,
   role,
+  isOrganisationSgcPrivileged,
   now,
 }: GetEnvelopeDownloadPolicyOptions): Promise<EnvelopeDownloadPolicy> => {
   return buildEnvelopeDownloadPolicy({
@@ -176,6 +189,7 @@ export const getEnvelopeDownloadPolicy = async ({
     completedAt,
     windowHours: await resolveDownloadWindowHours(downloadWindowHours),
     role,
+    isOrganisationSgcPrivileged,
     now,
   });
 };
@@ -191,7 +205,12 @@ type GetUserDownloadPolicyOptions = {
 
 /**
  * Resolves the download policy for a user acting through a team (session or API
- * token), using their role in the envelope's team.
+ * token), using their role in the envelope's team and, when that role is lower,
+ * their organisation role.
+ *
+ * Organisation members holding the SGC role get the same privileges as a team SGC
+ * member on every envelope of that organisation, even when the team they reach the
+ * envelope through does not grant them the SGC role.
  *
  * Users outside that team - for example someone reaching an organisation template
  * through another team - are treated as non-privileged.
@@ -203,9 +222,20 @@ export const getUserDownloadPolicy = async ({
 }: GetUserDownloadPolicyOptions): Promise<EnvelopeDownloadPolicy> => {
   const team = await getTeamById({ userId, teamId }).catch(() => null);
 
+  const organisationRole = team
+    ? await getMemberOrganisationRole({
+        organisationId: team.organisationId,
+        reference: {
+          type: 'User',
+          id: userId,
+        },
+      }).catch(() => null)
+    : null;
+
   return await getEnvelopeDownloadPolicy({
     ...options,
     role: team?.currentTeamRole ?? null,
+    isOrganisationSgcPrivileged: organisationRole !== null && hasOrganisationSgcDownloadPrivileges(organisationRole),
   });
 };
 

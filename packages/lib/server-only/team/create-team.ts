@@ -90,7 +90,8 @@ export const createTeam = async ({ userId, teamName, teamUrl, organisationId, in
   }
 
   // Inherit internal organisation groups to the team.
-  // Organisation Admins/Mangers get assigned as team admins, members get assigned as team members.
+  // Organisation Admins/Managers get assigned as team admins, SGC members keep the
+  // SGC team role and members get assigned as team members.
   const internalOrganisationGroups = organisation.groups
     .filter((group) => {
       if (group.type !== OrganisationGroupType.INTERNAL_ORGANISATION) {
@@ -102,9 +103,10 @@ export const createTeam = async ({ userId, teamName, teamUrl, organisationId, in
         return true;
       }
 
-      // Otherwise, only inherit organisation admins/managers.
+      // Otherwise, only inherit the organisation roles that oversee every team.
       return (
         group.organisationRole === OrganisationMemberRole.ADMIN ||
+        group.organisationRole === OrganisationMemberRole.SGC ||
         group.organisationRole === OrganisationMemberRole.MANAGER
       );
     })
@@ -113,6 +115,10 @@ export const createTeam = async ({ userId, teamName, teamUrl, organisationId, in
         .with(OrganisationMemberRole.ADMIN, OrganisationMemberRole.MANAGER, () => ({
           organisationGroupId: group.id,
           teamRole: TeamMemberRole.ADMIN,
+        }))
+        .with(OrganisationMemberRole.SGC, () => ({
+          organisationGroupId: group.id,
+          teamRole: TeamMemberRole.SGC,
         }))
         .with(OrganisationMemberRole.MEMBER, () => ({
           organisationGroupId: group.id,

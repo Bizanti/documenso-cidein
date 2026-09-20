@@ -8,6 +8,7 @@ import { z } from 'zod';
 export const ZAdminRoleSelection = z.enum([
   'OWNER',
   OrganisationMemberRole.ADMIN,
+  OrganisationMemberRole.SGC,
   OrganisationMemberRole.MANAGER,
   OrganisationMemberRole.MEMBER,
 ]);

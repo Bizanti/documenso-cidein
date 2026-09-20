@@ -171,6 +171,7 @@ export default function OrganisationGroupSettingsPage({ params, loaderData }: Ro
 
           const roleLabel = match(highestRole)
             .with(OrganisationMemberRole.ADMIN, () => t`Admin`)
+            .with(OrganisationMemberRole.SGC, () => t`SGC`)
             .with(OrganisationMemberRole.MANAGER, () => t`Manager`)
             .with(OrganisationMemberRole.MEMBER, () => t`Member`)
             .exhaustive();
