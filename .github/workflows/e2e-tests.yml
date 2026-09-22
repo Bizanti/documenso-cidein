@@ -17,9 +17,13 @@ concurrency:
 
 jobs:
   e2e_tests:
-    name: 'E2E Tests'
+    name: 'E2E Tests (${{ matrix.shard }}/4)'
     timeout-minutes: 90
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
 
@@ -39,18 +43,22 @@ jobs:
       - name: Seed the database
         run: npm run prisma:seed
 
+      - name: Build app
+        run: npx turbo run build --filter=@documenso/remix
+
       - name: Run Playwright tests
-        run: npm run ci
+        run: npm run test:e2e:shard -w @documenso/app-tests
         env:
           # Needed since we use next start which will set the NODE_ENV to production
           NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: './example/cert.p12'
           DANGEROUS_BYPASS_RATE_LIMITS: 'true'
           PLAYWRIGHT_UI_WORKERS: '4'
+          PLAYWRIGHT_SHARD: '${{ matrix.shard }}/4'
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.shard }}
           path: 'packages/app-tests/**/test-results/*'
           retention-days: 7
     env:
