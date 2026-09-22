@@ -81,7 +81,10 @@ export default defineConfig({
     {
       name: 'api',
       testMatch: /e2e\/api\/.*\.spec\.ts/,
-      workers: 10, // Limited by DB connections before it gets flakey.
+      // Upstream note: limited by DB connections before it gets flakey. CI
+      // overrides via PLAYWRIGHT_API_WORKERS to reduce contention on the
+      // single app server per runner.
+      workers: process.env.PLAYWRIGHT_API_WORKERS ? Math.max(Number(process.env.PLAYWRIGHT_API_WORKERS), 1) : 10,
     },
     // License tests that share a single license file - must run serially
     {

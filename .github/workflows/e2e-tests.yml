@@ -61,6 +61,7 @@ jobs:
         env:
           NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: './example/cert.p12'
           DANGEROUS_BYPASS_RATE_LIMITS: 'true'
+          PLAYWRIGHT_API_WORKERS: '6'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -98,7 +99,7 @@ jobs:
           # Needed since we use next start which will set the NODE_ENV to production
           NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: './example/cert.p12'
           DANGEROUS_BYPASS_RATE_LIMITS: 'true'
-          PLAYWRIGHT_UI_WORKERS: '4'
+          PLAYWRIGHT_UI_WORKERS: '3'
           PLAYWRIGHT_SHARD: '${{ matrix.shard }}/4'
       - uses: actions/upload-artifact@v4
         if: always()
