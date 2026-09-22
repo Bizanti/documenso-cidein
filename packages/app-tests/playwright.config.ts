@@ -102,7 +102,9 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         viewport: { width: 1920, height: 1200 },
       },
-      workers: calculateWorkers(),
+      workers: process.env.PLAYWRIGHT_UI_WORKERS
+        ? Math.max(Number(process.env.PLAYWRIGHT_UI_WORKERS), 1)
+        : calculateWorkers(),
     },
 
     // {

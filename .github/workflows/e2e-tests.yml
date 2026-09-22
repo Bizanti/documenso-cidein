@@ -5,6 +5,11 @@ on:
     branches: ['main', 'develop']
   pull_request:
     branches: ['main', 'develop']
+    paths-ignore:
+      - '**.md'
+      - 'apps/docs/**'
+      - 'assets/**'
+      - '.github/ISSUE_TEMPLATE/**'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -34,15 +39,13 @@ jobs:
       - name: Seed the database
         run: npm run prisma:seed
 
-      - name: Install playwright browsers
-        run: npx playwright install --with-deps
-
       - name: Run Playwright tests
         run: npm run ci
         env:
           # Needed since we use next start which will set the NODE_ENV to production
           NEXT_PRIVATE_SIGNING_LOCAL_FILE_PATH: './example/cert.p12'
           DANGEROUS_BYPASS_RATE_LIMITS: 'true'
+          PLAYWRIGHT_UI_WORKERS: '4'
 
       - uses: actions/upload-artifact@v4
         if: always()
