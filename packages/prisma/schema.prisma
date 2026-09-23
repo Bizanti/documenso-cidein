@@ -465,6 +465,13 @@ model Envelope {
   formValues  Json? /// [DocumentFormValues] @zod.custom.use(ZDocumentFormValuesSchema)
   visibility  DocumentVisibility @default(EVERYONE)
 
+  /// Branding (team over organisation) as it was when the envelope was created.
+  /// Every branded artifact in the envelope's context must be rendered from this
+  /// snapshot, not from the settings live at rendering time. Null on envelopes
+  /// created before the pin existed, which fall back to live settings.
+  /// [EnvelopeBrandingSnapshot]
+  brandingSnapshot Json?
+
   // Template specific fields.
   templateType      TemplateType        @default(PRIVATE)
   publicTitle       String              @default("")

@@ -51,6 +51,12 @@ import { DocumentSigningRecipientProvider } from './document-signing-recipient-p
 type DocumentSigningBranding = {
   brandingEnabled: boolean;
   brandingLogo: string;
+
+  /**
+   * URL (or inlined data URL) of the logo the envelope was pinned to, or null
+   * when it has no custom logo.
+   */
+  brandingLogoUrl: string | null;
 };
 
 export type DocumentSigningPageViewV1Props = {
@@ -164,14 +170,16 @@ export const DocumentSigningPageViewV1 = ({
   const pendingFields = fieldsRequiringValidation.filter((field) => !field.inserted);
   const hasPendingFields = pendingFields.length > 0;
 
-  const hasCustomBrandingLogo = branding.brandingEnabled && Boolean(branding.brandingLogo);
+  // The URL points at the branding this envelope was pinned to when it was
+  // created, not at whatever the team has configured right now.
+  const { brandingLogoUrl } = branding;
 
   return (
     <DocumentSigningRecipientProvider recipient={recipient} targetSigner={targetSigner}>
       <div className="mx-auto w-full max-w-screen-xl sm:px-6">
-        {hasCustomBrandingLogo && (
+        {brandingLogoUrl && (
           <img
-            src={`/api/branding/logo/team/${document.teamId}`}
+            src={brandingLogoUrl}
             alt={`${document.team.name}'s Logo`}
             className="mb-4 h-12 w-12 md:mb-2"
           />

@@ -1,5 +1,5 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
-import { loadRecipientBrandingByTeamId } from '@documenso/lib/server-only/branding/load-recipient-branding';
+import { loadRecipientBranding } from '@documenso/lib/server-only/branding/load-recipient-branding';
 import { getDocumentAndSenderByToken } from '@documenso/lib/server-only/document/get-document-by-token';
 import { getEnvelopeById } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { getRecipientByToken } from '@documenso/lib/server-only/recipient/get-recipient-by-token';
@@ -65,7 +65,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   const documentPathForEditing = isOwnerOrTeamMember && team ? formatDocumentsPath(team.url) + '/' + document.id : null;
 
-  const branding = await loadRecipientBrandingByTeamId({ teamId: document.teamId });
+  const branding = await loadRecipientBranding({
+    teamId: document.teamId,
+    brandingSnapshot: document.brandingSnapshot,
+  });
 
   return {
     documentPathForEditing,

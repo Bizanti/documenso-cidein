@@ -4,6 +4,8 @@ import type { EnvelopeType } from '@prisma/client';
 
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
+import { getTeamSettings } from '../team/get-team-settings';
+import { resolveSigningBranding } from './branding-snapshot';
 
 export type GetEditorEnvelopeByIdOptions = {
   id: EnvelopeIdOptions;
@@ -92,8 +94,20 @@ export const getEditorEnvelopeById = async ({ id, userId, teamId, type }: GetEdi
     });
   }
 
+  // The editor renders the branding the envelope is pinned to, so an embedded
+  // authoring session does not silently switch logo when the team settings
+  // change midway through preparing the envelope.
+  const settings = await getTeamSettings({ teamId: envelope.teamId });
+
+  const { brandingLogoUrl } = await resolveSigningBranding({
+    teamId: envelope.teamId,
+    brandingSnapshot: envelope.brandingSnapshot,
+    liveBranding: settings,
+  });
+
   return {
     ...envelope,
+    brandingLogoUrl,
     attachments: envelope.envelopeAttachments,
     user: {
       id: envelope.user.id,

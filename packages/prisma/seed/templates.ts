@@ -5,6 +5,7 @@ import {
   DIRECT_TEMPLATE_RECIPIENT_EMAIL,
   DIRECT_TEMPLATE_RECIPIENT_NAME,
 } from '@documenso/lib/constants/direct-templates';
+import { getEnvelopeBrandingSnapshotForTeam } from '@documenso/lib/server-only/envelope/branding-snapshot';
 import { incrementTemplateId } from '@documenso/lib/server-only/envelope/increment-id';
 import { FIELD_SIGNATURE_META_DEFAULT_VALUES } from '@documenso/lib/types/field-meta';
 import { SignatureLevel } from '@documenso/lib/types/signature-level';
@@ -169,6 +170,11 @@ export const seedDirectTemplate = async (options: SeedTemplateOptions) => {
     data: {},
   });
 
+  // Pin the branding like every real creation path does, so specs exercise the
+  // same envelope shape the product produces. Fixtures that never created the
+  // team settings row fall back to no pin, i.e. live branding.
+  const brandingSnapshot = await getEnvelopeBrandingSnapshotForTeam({ teamId }).catch(() => null);
+
   const template = await prisma.envelope.create({
     data: {
       id: prefixedId('envelope'),
@@ -189,6 +195,7 @@ export const seedDirectTemplate = async (options: SeedTemplateOptions) => {
       documentMetaId: documentMeta.id,
       userId,
       teamId,
+      brandingSnapshot,
       recipients: {
         create: {
           signingOrder: 1,

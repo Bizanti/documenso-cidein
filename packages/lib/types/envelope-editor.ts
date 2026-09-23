@@ -298,6 +298,13 @@ export const ZEditorEnvelopeSchema = EnvelopeSchema.pick({
   }),
   recipients: ZEnvelopeRecipientLiteSchema.array(),
   fields: ZEnvelopeFieldSchema.array(),
+
+  /**
+   * URL (or inlined data URL) of the branding logo this envelope is pinned to.
+   * Nullish when the envelope has no custom logo, and absent on envelopes that
+   * do not exist yet (embedded authoring drafts).
+   */
+  brandingLogoUrl: z.string().nullish(),
   envelopeItems: EnvelopeItemSchema.pick({
     envelopeId: true,
     id: true,

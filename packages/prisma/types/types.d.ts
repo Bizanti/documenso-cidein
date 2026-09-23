@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-namespace */
+import type { TEnvelopeBrandingSnapshot } from '@documenso/lib/server-only/envelope/branding-snapshot';
 import type { TDefaultRecipient } from '@documenso/lib/types/default-recipients';
 import type { TDocumentAuthOptions, TRecipientAuthOptions } from '@documenso/lib/types/document-auth';
 import type { TDocumentEmailSettings } from '@documenso/lib/types/document-email';
@@ -24,6 +25,8 @@ declare global {
     type FieldMeta = TFieldMetaNotOptionalSchema;
 
     type EnvelopeAttachmentType = TEnvelopeAttachmentType;
+
+    type EnvelopeBrandingSnapshot = TEnvelopeBrandingSnapshot;
 
     type DefaultRecipient = TDefaultRecipient;
   }

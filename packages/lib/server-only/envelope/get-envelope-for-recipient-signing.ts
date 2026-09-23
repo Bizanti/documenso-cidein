@@ -15,6 +15,7 @@ import { ZRecipientLiteSchema } from '../../types/recipient';
 import { isRecipientExpired } from '../../utils/recipients';
 import { isRecipientAuthorized } from '../document/is-recipient-authorized';
 import { getTeamSettings } from '../team/get-team-settings';
+import { resolveSigningBranding } from './branding-snapshot';
 
 export type GetRecipientEnvelopeByTokenOptions = {
   token: string;
@@ -143,6 +144,13 @@ export const ZEnvelopeForSigningResponse = z.object({
     includeSenderDetails: z.boolean(),
     brandingEnabled: z.boolean(),
     brandingLogo: z.string(),
+
+    /**
+     * URL (or inlined data URL) of the branding logo this envelope is pinned
+     * to. Null when the envelope has no custom logo, in which case the signing
+     * surfaces fall back to the Documenso wordmark.
+     */
+    brandingLogoUrl: z.string().nullable(),
   }),
 });
 
@@ -244,6 +252,14 @@ export const getEnvelopeForRecipientSigning = async ({
 
   const settings = await getTeamSettings({ teamId: envelope.teamId });
 
+  // The envelope is rendered with the branding it was pinned to, not with the
+  // settings live at this moment.
+  const signingBranding = await resolveSigningBranding({
+    teamId: envelope.teamId,
+    brandingSnapshot: envelope.brandingSnapshot,
+    liveBranding: settings,
+  });
+
   // Get the signature if they have put it in already.
   const recipientSignature = await prisma.signature.findFirst({
     where: {
@@ -299,8 +315,7 @@ export const getEnvelopeForRecipientSigning = async ({
     sender,
     settings: {
       includeSenderDetails: settings.includeSenderDetails,
-      brandingEnabled: settings.brandingEnabled,
-      brandingLogo: settings.brandingLogo,
+      ...signingBranding,
     },
   } satisfies EnvelopeForSigningResponse);
 };

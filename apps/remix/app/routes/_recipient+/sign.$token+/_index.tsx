@@ -10,9 +10,10 @@ import { EnvelopeRenderProvider } from '@documenso/lib/client-only/providers/env
 import { useOptionalSession } from '@documenso/lib/client-only/providers/session';
 import { IS_INSTANCE_CSC_MODE } from '@documenso/lib/constants/app';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
-import { loadRecipientBrandingByTeamId } from '@documenso/lib/server-only/branding/load-recipient-branding';
+import { loadRecipientBranding } from '@documenso/lib/server-only/branding/load-recipient-branding';
 import { getDocumentAndSenderByToken } from '@documenso/lib/server-only/document/get-document-by-token';
 import { viewedDocument } from '@documenso/lib/server-only/document/viewed-document';
+import { resolveSigningBranding } from '@documenso/lib/server-only/envelope/branding-snapshot';
 import { getEnvelopeForRecipientSigning } from '@documenso/lib/server-only/envelope/get-envelope-for-recipient-signing';
 import { getEnvelopeRequiredAccessData } from '@documenso/lib/server-only/envelope/get-envelope-required-access-data';
 import { getCompletedFieldsForToken } from '@documenso/lib/server-only/field/get-completed-fields-for-token';
@@ -163,6 +164,13 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
 
   const [recipientSignature] = recipientSignatures;
 
+  // Render the branding the envelope was pinned to, not the live settings.
+  const branding = await resolveSigningBranding({
+    teamId: document.teamId,
+    brandingSnapshot: document.brandingSnapshot,
+    liveBranding: settings,
+  });
+
   return {
     isDocumentAccessValid: true,
     document,
@@ -174,10 +182,7 @@ const handleV1Loader = async ({ params, request }: Route.LoaderArgs) => {
     recipientSignature,
     isRecipientsTurn,
     includeSenderDetails: settings.includeSenderDetails,
-    branding: {
-      brandingEnabled: settings.brandingEnabled,
-      brandingLogo: settings.brandingLogo,
-    },
+    branding,
   } as const;
 };
 
@@ -342,6 +347,7 @@ export async function loader(loaderArgs: Route.LoaderArgs) {
         select: {
           internalVersion: true,
           teamId: true,
+          brandingSnapshot: true,
         },
       },
     },
@@ -351,8 +357,9 @@ export async function loader(loaderArgs: Route.LoaderArgs) {
     throw new Response('Not Found', { status: 404 });
   }
 
-  const branding = await loadRecipientBrandingByTeamId({
+  const branding = await loadRecipientBranding({
     teamId: foundRecipient.envelope.teamId,
+    brandingSnapshot: foundRecipient.envelope.brandingSnapshot,
   });
 
   if (foundRecipient.envelope.internalVersion === 2) {

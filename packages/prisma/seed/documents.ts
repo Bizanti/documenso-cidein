@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { getEnvelopeBrandingSnapshotForTeam } from '@documenso/lib/server-only/envelope/branding-snapshot';
 import { createEnvelope } from '@documenso/lib/server-only/envelope/create-envelope';
 import { incrementDocumentId } from '@documenso/lib/server-only/envelope/increment-id';
 import {
@@ -89,6 +90,11 @@ export const seedBlankDocument = async (owner: User, teamId: number, options: Cr
 
   const documentId = await incrementDocumentId();
 
+  // Pin the branding like every real creation path does, so specs exercise the
+  // same envelope shape the product produces. Fixtures that never created the
+  // team settings row fall back to no pin, i.e. live branding.
+  const brandingSnapshot = await getEnvelopeBrandingSnapshotForTeam({ teamId }).catch(() => null);
+
   return await prisma.envelope.create({
     data: {
       id: prefixedId('envelope'),
@@ -110,6 +116,7 @@ export const seedBlankDocument = async (owner: User, teamId: number, options: Cr
         },
       },
       userId: owner.id,
+      brandingSnapshot,
       ...createDocumentOptions,
     },
   });
