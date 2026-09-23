@@ -11,7 +11,7 @@ import type { TDocumentAuditLogBaseSchema } from '../../types/document-audit-log
 import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import { getTranslations } from '../../utils/i18n';
 import { getDocumentCertificateAuditLogs } from '../document/get-document-certificate-audit-logs';
-import { getOrganisationClaimByTeamId } from '../organisation/get-organisation-claims';
+import { resolveDocumentBranding } from './document-branding';
 import { renderCertificate } from './render-certificate';
 
 export type GenerateCertificatePdfOptions = {
@@ -43,8 +43,11 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
 
   const documentLanguage = ZSupportedLanguageCodeSchema.parse(language);
 
-  const [organisationClaim, auditLogs, messages] = await Promise.all([
-    getOrganisationClaimByTeamId({ teamId: envelope.teamId }),
+  const [branding, auditLogs, messages] = await Promise.all([
+    resolveDocumentBranding({
+      teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
+    }),
     getDocumentCertificateAuditLogs({
       envelopeId: envelope.id,
     }),
@@ -137,8 +140,7 @@ export const generateCertificatePdf = async (options: GenerateCertificatePdfOpti
     }),
     envelopeOwner,
     envelopeId: envelope.id,
-    qrToken: envelope.qrToken,
-    hidePoweredBy: organisationClaim.flags.hidePoweredBy ?? false,
+    branding,
     pageWidth,
     pageHeight,
     i18n,
