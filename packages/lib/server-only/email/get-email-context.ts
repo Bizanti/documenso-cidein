@@ -12,15 +12,22 @@ import { EmailDomainStatus, type OrganisationClaim, type OrganisationGlobalSetti
 import type { Transporter } from 'nodemailer';
 import { match, P } from 'ts-pattern';
 
-import { IS_BILLING_ENABLED } from '../../constants/app';
+import { IS_BILLING_ENABLED, NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
 import { DOCUMENSO_INTERNAL_EMAIL } from '../../constants/email';
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { logger } from '../../utils/logger';
 import {
   organisationGlobalSettingsToBranding,
+  type PinnedEmailBranding,
   teamGlobalSettingsToBranding,
+  teamGlobalSettingsToPinnedEmailBranding,
 } from '../../utils/team-global-settings-to-branding';
 import { extractDerivedTeamSettings } from '../../utils/teams';
+import {
+  resolveEnvelopeBranding,
+  resolveSigningBranding,
+  type TDerivedBrandingSettings,
+} from '../envelope/branding-snapshot';
 import { resolveEmailTransport } from './resolve-email-transport';
 
 type EmailMetaOption = Partial<Pick<DocumentMeta, 'emailId' | 'emailReplyTo' | 'language'>>;
@@ -35,6 +42,16 @@ type BaseGetEmailContextOptions = {
     | {
         type: 'team';
         teamId: number;
+
+        /**
+         * The `brandingSnapshot` of the envelope this email belongs to.
+         *
+         * When provided, the email renders the branding the envelope is pinned
+         * to instead of the settings live at send time. Envelopes created
+         * before the pin existed (and non-envelope emails) have no snapshot,
+         * and keep resolving branding live.
+         */
+        brandingSnapshot?: unknown;
       }
     | {
         type: 'organisation';
@@ -96,7 +113,7 @@ export const getEmailContext = async (options: GetEmailContextOptions): Promise<
   if (source.type === 'organisation') {
     emailContext = await handleOrganisationEmailContext(source.organisationId);
   } else {
-    emailContext = await handleTeamEmailContext(source.teamId);
+    emailContext = await handleTeamEmailContext(source.teamId, source.brandingSnapshot);
   }
 
   const emailLanguage = meta?.language || emailContext.settings.documentLanguage;
@@ -240,7 +257,7 @@ const handleOrganisationEmailContext = async (organisationId: string) => {
   };
 };
 
-const handleTeamEmailContext = async (teamId: number) => {
+const handleTeamEmailContext = async (teamId: number, brandingSnapshot?: unknown) => {
   const team = await prisma.team.findFirst({
     where: {
       id: teamId,
@@ -281,7 +298,12 @@ const handleTeamEmailContext = async (teamId: number) => {
 
   const teamSettings = extractDerivedTeamSettings(organisation.organisationGlobalSettings, team.teamGlobalSettings);
 
-  const branding = teamGlobalSettingsToBranding(teamSettings, teamId, claims.flags.hidePoweredBy ?? false);
+  const branding = await resolveTeamEmailBranding({
+    teamId,
+    settings: teamSettings,
+    hidePoweredBy: claims.flags.hidePoweredBy ?? false,
+    brandingSnapshot,
+  });
 
   const allowBrandedEmailColors = !IS_BILLING_ENABLED() || claims.flags.embedSigningWhiteLabel === true;
 
@@ -298,6 +320,74 @@ const handleTeamEmailContext = async (teamId: number) => {
     organisationId: organisation.id,
     organisationType: organisation.type,
   };
+};
+
+/**
+ * Build the branding a team-sourced email renders: the branding the envelope is
+ * pinned to when it has a snapshot, the live team settings otherwise.
+ */
+const resolveTeamEmailBranding = async ({
+  teamId,
+  settings,
+  hidePoweredBy,
+  brandingSnapshot,
+}: {
+  teamId: number;
+  settings: Omit<OrganisationGlobalSettings, 'id'>;
+  hidePoweredBy: boolean;
+  brandingSnapshot: unknown;
+}) => {
+  const pinnedBranding = await resolvePinnedEmailBranding({ teamId, brandingSnapshot, liveBranding: settings });
+
+  if (!pinnedBranding) {
+    return teamGlobalSettingsToBranding(settings, teamId, hidePoweredBy);
+  }
+
+  return teamGlobalSettingsToPinnedEmailBranding(settings, hidePoweredBy, pinnedBranding);
+};
+
+/**
+ * Resolve the branding an envelope's emails must render from its snapshot, or
+ * null when the envelope has no readable snapshot and the caller must keep
+ * resolving branding live.
+ *
+ * `resolveSigningBranding` owns the rule for which logo URL still serves the
+ * pinned bytes, so it is reused here rather than duplicated: the emails and the
+ * signing pages of one envelope must never disagree about the logo it shows. It
+ * returns an app-relative path while emails need an absolute URL.
+ */
+const resolvePinnedEmailBranding = async ({
+  teamId,
+  brandingSnapshot,
+  liveBranding,
+}: {
+  teamId: number;
+  brandingSnapshot: unknown;
+  liveBranding: TDerivedBrandingSettings;
+}): Promise<PinnedEmailBranding | null> => {
+  const { branding, isPinned } = resolveEnvelopeBranding({ brandingSnapshot, liveBranding });
+
+  if (!isPinned) {
+    return null;
+  }
+
+  const { brandingLogoUrl } = await resolveSigningBranding({ teamId, brandingSnapshot, liveBranding });
+
+  return {
+    enabled: branding.enabled,
+    logoUrl: brandingLogoUrl === null ? '' : toAbsoluteUrl(brandingLogoUrl),
+    url: branding.url,
+    companyDetails: branding.companyDetails,
+    colors: branding.colors,
+  };
+};
+
+const toAbsoluteUrl = (value: string) => {
+  if (value.startsWith('/')) {
+    return `${NEXT_PUBLIC_WEBAPP_URL()}${value}`;
+  }
+
+  return value;
 };
 
 const getAllowedEmails = (

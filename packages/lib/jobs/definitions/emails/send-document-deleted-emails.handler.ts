@@ -11,7 +11,7 @@ import type { JobRunIO } from '../../client/_internal/job';
 import type { TSendDocumentDeletedEmailsJobDefinition } from './send-document-deleted-emails';
 
 export const run = async ({ payload, io }: { payload: TSendDocumentDeletedEmailsJobDefinition; io: JobRunIO }) => {
-  const { teamId, documentName, inviterName, inviterEmail, meta, recipients } = payload;
+  const { teamId, documentName, inviterName, inviterEmail, meta, recipients, brandingSnapshot } = payload;
 
   if (recipients.length === 0) {
     return;
@@ -22,6 +22,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentDeletedEmails
     source: {
       type: 'team',
       teamId,
+      brandingSnapshot,
     },
     meta,
   });

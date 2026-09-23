@@ -71,6 +71,7 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: envelope.documentMeta,
   });

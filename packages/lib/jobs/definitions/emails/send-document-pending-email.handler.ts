@@ -46,6 +46,7 @@ export const run = async ({ payload }: { payload: TSendDocumentPendingEmailJobDe
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: envelope.documentMeta,
   });

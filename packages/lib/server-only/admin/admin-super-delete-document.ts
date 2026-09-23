@@ -49,6 +49,7 @@ export const adminSuperDeleteDocument = async ({ envelopeId, requestMetadata }: 
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: envelope.documentMeta,
   });

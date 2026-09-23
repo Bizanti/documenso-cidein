@@ -21,6 +21,13 @@ const SEND_DOCUMENT_DELETED_EMAILS_JOB_DEFINITION_SCHEMA = z.object({
       language: z.string().optional(),
     })
     .nullable(),
+  /**
+   * The branding the envelope was pinned to, captured before it is
+   * hard-deleted like `meta`. This job is enqueued after the envelope row is
+   * gone, so the snapshot cannot be read at send time; callers that do not pass
+   * it fall back to the team's live branding.
+   */
+  brandingSnapshot: z.unknown().optional(),
   recipients: z
     .object({
       email: z.string(),
