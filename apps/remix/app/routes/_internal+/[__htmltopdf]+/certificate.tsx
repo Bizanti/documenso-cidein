@@ -3,7 +3,11 @@ import { RECIPIENT_ROLE_SIGNING_REASONS, RECIPIENT_ROLES_DESCRIPTION } from '@do
 import { unsafeGetEntireEnvelope } from '@documenso/lib/server-only/admin/get-entire-document';
 import { decryptSecondaryData } from '@documenso/lib/server-only/crypto/decrypt';
 import { getDocumentCertificateAuditLogs } from '@documenso/lib/server-only/document/get-document-certificate-audit-logs';
-import { resolveDocumentBranding, toBrandLogoDataUrl } from '@documenso/lib/server-only/pdf/document-branding';
+import {
+  resolveDocumentBranding,
+  shouldRenderBrandMark,
+  toBrandLogoDataUrl,
+} from '@documenso/lib/server-only/pdf/document-branding';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
@@ -89,7 +93,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       documentMeta: envelope.documentMeta,
     },
     brandingLogoUrl: branding.logo ? toBrandLogoDataUrl(branding.logo) : null,
-    hidePoweredBy: branding.hidePoweredBy,
+    showBrandMark: shouldRenderBrandMark(branding),
     documentLanguage,
     auditLogs,
     messages,
@@ -106,7 +110,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  * Update: Maybe <Trans> tags work now after RR7 migration.
  */
 export default function SigningCertificate({ loaderData }: Route.ComponentProps) {
-  const { document, documentLanguage, hidePoweredBy, brandingLogoUrl, auditLogs, messages } = loaderData;
+  const { document, documentLanguage, showBrandMark, brandingLogoUrl, auditLogs, messages } = loaderData;
 
   const { i18n, _ } = useLingui();
 
@@ -367,7 +371,7 @@ export default function SigningCertificate({ loaderData }: Route.ComponentProps)
         </CardContent>
       </Card>
 
-      {(brandingLogoUrl || !hidePoweredBy) && (
+      {showBrandMark && (
         <div className="my-8 flex items-end justify-end gap-x-4">
           <p className="flex-shrink-0 font-medium text-sm print:text-xs">{_(msg`Signing certificate provided by`)}:</p>
 

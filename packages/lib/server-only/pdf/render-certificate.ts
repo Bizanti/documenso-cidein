@@ -16,6 +16,8 @@ import { getSignatureFontFamily } from '../../constants/pdf';
 import { RECIPIENT_ROLE_SIGNING_REASONS, RECIPIENT_ROLES_DESCRIPTION } from '../../constants/recipient-roles';
 import type { TDocumentAuditLogBaseSchema } from '../../types/document-audit-logs';
 import { readFallbackBrandLogo, renderBrandLogoImage } from './brand-logo';
+import type { TDocumentBranding } from './document-branding';
+import { shouldRenderBrandMark } from './document-branding';
 import { ensureFontLibrary } from './helpers';
 
 type ColumnWidths = [number, number, number];
@@ -47,11 +49,10 @@ type GenerateCertificateOptions = {
   envelopeId: string;
 
   /**
-   * The pinned brand logo of the envelope, applied to the certificate before it
-   * is sealed. Null falls back to the Documenso mark.
+   * The brand the envelope is pinned to, applied to the certificate before it is
+   * sealed. An absent brand falls back to the Documenso mark.
    */
-  brandingLogo: Buffer | null;
-  hidePoweredBy: boolean;
+  branding: TDocumentBranding;
   i18n: I18n;
   envelopeOwner: {
     name: string;
@@ -698,8 +699,7 @@ const renderTables = (options: RenderTablesOptions) => {
 export async function renderCertificate({
   recipients,
   envelopeId,
-  brandingLogo,
-  hidePoweredBy,
+  branding,
   i18n,
   envelopeOwner,
   pageWidth,
@@ -737,9 +737,9 @@ export async function renderCertificate({
   // The brand mark is the pinned brand logo of the envelope, and it is only
   // omitted when the organisation hides the Documenso mark on an unbranded
   // document.
-  const shouldRenderBranding = brandingLogo !== null || !hidePoweredBy;
-
-  const brandingGroup = shouldRenderBranding ? renderBranding({ brandingLogo, i18n }) : null;
+  const brandingGroup = shouldRenderBrandMark(branding)
+    ? renderBranding({ brandingLogo: branding.logo?.content ?? null, i18n })
+    : null;
   const brandingRect = brandingGroup?.getClientRect() ?? null;
   const brandingTopPadding = 24;
 

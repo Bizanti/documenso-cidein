@@ -18,6 +18,8 @@ import type { TDocumentAuditLog } from '../../types/document-audit-logs';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../types/document-audit-logs';
 import { formatDocumentAuditLogAction } from '../../utils/document-audit-logs';
 import { readFallbackBrandLogo, renderBrandLogoImage } from './brand-logo';
+import type { TDocumentBranding } from './document-branding';
+import { shouldRenderBrandMark } from './document-branding';
 import { ensureFontLibrary } from './helpers';
 
 export type AuditLogRecipient = {
@@ -36,11 +38,10 @@ type GenerateAuditLogsOptions = {
   auditLogs: TDocumentAuditLog[];
 
   /**
-   * The pinned brand logo of the envelope, applied to the audit log before it
-   * is sealed. Null falls back to the Documenso mark.
+   * The brand the envelope is pinned to, applied to the audit log before it is
+   * sealed. An absent brand falls back to the Documenso mark.
    */
-  brandingLogo: Buffer | null;
-  hidePoweredBy: boolean;
+  branding: TDocumentBranding;
   pageWidth: number;
   pageHeight: number;
   i18n: I18n;
@@ -574,8 +575,7 @@ export async function renderAuditLogs({
   pageWidth,
   pageHeight,
   i18n,
-  brandingLogo,
-  hidePoweredBy,
+  branding,
 }: GenerateAuditLogsOptions) {
   ensureFontLibrary();
 
@@ -614,9 +614,9 @@ export async function renderAuditLogs({
   // The brand mark is the pinned brand logo of the envelope, and it is only
   // omitted when the organisation hides the Documenso mark on an unbranded
   // document.
-  const shouldRenderBranding = brandingLogo !== null || !hidePoweredBy;
-
-  const brandingGroup = shouldRenderBranding ? renderBranding({ brandingLogo }) : null;
+  const brandingGroup = shouldRenderBrandMark(branding)
+    ? renderBranding({ brandingLogo: branding.logo?.content ?? null })
+    : null;
   const brandingRect = brandingGroup?.getClientRect() ?? null;
   const brandingTopPadding = 24;
 

@@ -4,7 +4,11 @@ import { RECIPIENT_ROLES_DESCRIPTION } from '@documenso/lib/constants/recipient-
 import { unsafeGetEntireEnvelope } from '@documenso/lib/server-only/admin/get-entire-document';
 import { decryptSecondaryData } from '@documenso/lib/server-only/crypto/decrypt';
 import { findDocumentAuditLogs } from '@documenso/lib/server-only/document/find-document-audit-logs';
-import { resolveDocumentBranding, toBrandLogoDataUrl } from '@documenso/lib/server-only/pdf/document-branding';
+import {
+  resolveDocumentBranding,
+  shouldRenderBrandMark,
+  toBrandLogoDataUrl,
+} from '@documenso/lib/server-only/pdf/document-branding';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { getTranslations } from '@documenso/lib/utils/i18n';
 import { Card, CardContent } from '@documenso/ui/primitives/card';
@@ -87,7 +91,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       documentMeta: envelope.documentMeta,
     },
     brandingLogoUrl: branding.logo ? toBrandLogoDataUrl(branding.logo) : null,
-    hidePoweredBy: branding.hidePoweredBy,
+    showBrandMark: shouldRenderBrandMark(branding),
     documentLanguage,
     messages,
   };
@@ -102,7 +106,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  * Update: Maybe <Trans> tags work now after RR7 migration.
  */
 export default function AuditLog({ loaderData }: Route.ComponentProps) {
-  const { auditLogs, document, documentLanguage, hidePoweredBy, brandingLogoUrl, messages } = loaderData;
+  const { auditLogs, document, documentLanguage, showBrandMark, brandingLogoUrl, messages } = loaderData;
 
   const { i18n, _ } = useLingui();
 
@@ -191,7 +195,7 @@ export default function AuditLog({ loaderData }: Route.ComponentProps) {
         <InternalAuditLogTable logs={auditLogs} />
       </div>
 
-      {(brandingLogoUrl || !hidePoweredBy) && (
+      {showBrandMark && (
         <div className="my-8 flex items-end justify-end gap-x-4">
           {brandingLogoUrl ? (
             <img
