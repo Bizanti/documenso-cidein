@@ -28,16 +28,19 @@ export const EnvelopeSignerHeader = () => {
   const { envelopeData, envelope, recipientFieldsRemaining, recipient } = useRequiredEnvelopeSigningContext();
 
   const isEmbedSigning = useEmbedSigningContext() !== null;
-  const hasCustomBrandingLogo = envelopeData.settings.brandingEnabled && Boolean(envelopeData.settings.brandingLogo);
+
+  // The URL points at the branding this envelope was pinned to when it was
+  // created, not at whatever the team has configured right now.
+  const brandingLogoUrl = isEmbedSigning ? null : envelopeData.settings.brandingLogoUrl;
 
   return (
     <nav className="embed--DocumentWidgetHeader flex max-w-screen flex-row justify-between border-border border-b bg-background px-4 py-3 md:px-6">
       {/* Left side - Logo and title */}
       <div className="flex min-w-0 flex-1 items-center space-x-2 md:w-auto md:flex-none">
         {!isEmbedSigning &&
-          (hasCustomBrandingLogo ? (
+          (brandingLogoUrl ? (
             <img
-              src={`/api/branding/logo/team/${envelope.teamId}`}
+              src={brandingLogoUrl}
               alt={`${envelope.team.name}'s Logo`}
               className="h-6 w-auto flex-shrink-0"
             />

@@ -43,6 +43,7 @@ import { resolveSignatureLevel } from '../signature-level/resolve-signature-leve
 import { getTeamSettings } from '../team/get-team-settings';
 import { assertUserNotDisabledById } from '../user/assert-user-not-disabled';
 import { triggerWebhook } from '../webhooks/trigger/trigger-webhook';
+import { buildEnvelopeBrandingSnapshot } from './branding-snapshot';
 
 type CreateEnvelopeRecipientFieldOptions = TFieldAndMeta & {
   documentDataId: string;
@@ -390,6 +391,9 @@ export const createEnvelope = async ({
         formValues,
         source: type === EnvelopeType.DOCUMENT ? DocumentSource.DOCUMENT : DocumentSource.TEMPLATE,
         documentMetaId: documentMeta.id,
+
+        // Pin the branding for the whole life of the envelope.
+        brandingSnapshot: buildEnvelopeBrandingSnapshot({ teamId, settings }),
 
         // Template specific fields.
         templateType: type === EnvelopeType.TEMPLATE ? templateType : undefined,

@@ -55,6 +55,12 @@ export default function EnvelopeEditorHeader() {
     [envelope, envelope.recipients],
   );
 
+  // Existing envelopes carry the pinned logo; authoring drafts that have not
+  // been saved yet fall back to the live branding flag of the embed session.
+  const brandingLogoUrl =
+    envelope.brandingLogoUrl ??
+    (editorConfig.embedded?.customBrandingLogo ? `/api/branding/logo/team/${envelope.teamId}` : null);
+
   const handleCreateEmbeddedEnvelope = async () => {
     const latestEnvelope = await flushAutosave();
 
@@ -71,8 +77,8 @@ export default function EnvelopeEditorHeader() {
     <nav className="w-full border-border border-b bg-background px-4 py-3 md:px-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 items-center space-x-4">
-          {editorConfig.embedded?.customBrandingLogo ? (
-            <img src={`/api/branding/logo/team/${envelope.teamId}`} alt="Logo" className="h-6 w-auto" />
+          {brandingLogoUrl ? (
+            <img src={brandingLogoUrl} alt="Logo" className="h-6 w-auto" />
           ) : (
             <Link to="/">
               <BrandingLogo className="h-6 w-auto" />

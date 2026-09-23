@@ -13,6 +13,7 @@ import { incrementDocumentId, incrementTemplateId } from '../envelope/increment-
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
 import { resolveSignatureLevel } from '../signature-level/resolve-signature-level';
 import { triggerWebhook } from '../webhooks/trigger/trigger-webhook';
+import { getEnvelopeBrandingSnapshotForTeam } from './branding-snapshot';
 
 export interface DuplicateEnvelopeOptions {
   id: EnvelopeIdOptions;
@@ -87,6 +88,10 @@ export const duplicateEnvelope = async ({ id, userId, teamId, overrides }: Dupli
 
   const targetType = duplicateAsTemplate ? EnvelopeType.TEMPLATE : envelope.type;
 
+  // The duplicate is a new envelope, so it pins the branding configured right
+  // now rather than the branding the source envelope was pinned to.
+  const brandingSnapshot = await getEnvelopeBrandingSnapshotForTeam({ teamId });
+
   // Enforce the organisation document-creation limit before creating the duplicate.
   if (targetType === EnvelopeType.DOCUMENT) {
     await assertOrganisationRatesAndLimits({
@@ -144,6 +149,7 @@ export const duplicateEnvelope = async ({ id, userId, teamId, overrides }: Dupli
       publicTitle: envelope.publicTitle ?? undefined,
       publicDescription: envelope.publicDescription ?? undefined,
       source: targetType === EnvelopeType.DOCUMENT ? DocumentSource.DOCUMENT : DocumentSource.TEMPLATE,
+      brandingSnapshot,
     },
     include: {
       recipients: true,

@@ -48,6 +48,7 @@ import {
 import type { EnvelopeIdOptions } from '../../utils/envelope';
 import { mapSecondaryIdToTemplateId } from '../../utils/envelope';
 import { buildTeamWhereQuery } from '../../utils/teams';
+import { buildEnvelopeBrandingSnapshot } from '../envelope/branding-snapshot';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { incrementDocumentId } from '../envelope/increment-id';
 import { insertFormValuesInPdf } from '../pdf/insert-form-values-in-pdf';
@@ -578,6 +579,9 @@ export const createDocumentFromTemplate = async ({
         useLegacyFieldInsertion: template.useLegacyFieldInsertion ?? false,
         documentMetaId: documentMeta.id,
         formValues: formValues ?? undefined,
+
+        // Pin the branding for the whole life of the envelope.
+        brandingSnapshot: buildEnvelopeBrandingSnapshot({ teamId, settings }),
         recipients: {
           createMany: {
             data: allFinalRecipients.map((recipient) => {

@@ -1,6 +1,6 @@
 import { IS_BILLING_ENABLED } from '../../constants/app';
 import type { TCssVarsSchema } from '../../types/css-vars';
-import { ZCssVarsSchema } from '../../types/css-vars';
+import { resolveEnvelopeBranding } from '../envelope/branding-snapshot';
 import { getOrganisationClaimByTeamId } from '../organisation/get-organisation-claims';
 import { getTeamSettings } from '../team/get-team-settings';
 
@@ -12,17 +12,26 @@ export type RecipientBrandingPayload = {
 };
 
 /**
- * Resolve the branding payload for a recipient-facing route, given the team
- * the envelope/document belongs to. Reads inherited team-or-org branding settings,
- * checks the org's claim flags, and returns a payload safe to send to the client.
+ * Resolve the branding payload for a recipient-facing route, given the envelope
+ * being rendered. The branding comes from the envelope's pinned snapshot, so a
+ * recipient never sees a branding change that happened while the envelope was
+ * in flight; envelopes created before the pin existed
+ * (`brandingSnapshot` null) fall back to the inherited team-or-org settings.
  *
- * Returns a minimal disabled payload if the team is not on a plan that allows
+ * The org's claim flags are checked against the live team, and a minimal
+ * disabled payload is returned when the team is not on a plan that allows
  * custom branding.
  */
-export const loadRecipientBrandingByTeamId = async ({
+export const loadRecipientBranding = async ({
   teamId,
+  brandingSnapshot,
 }: {
   teamId: number;
+
+  /**
+   * The `brandingSnapshot` column of the envelope being rendered.
+   */
+  brandingSnapshot: unknown;
 }): Promise<RecipientBrandingPayload> => {
   const billingEnabled = IS_BILLING_ENABLED();
 
@@ -34,7 +43,9 @@ export const loadRecipientBrandingByTeamId = async ({
   let allowCustomBranding = !billingEnabled || claim?.flags?.embedSigningWhiteLabel === true;
   const hidePoweredBy = !billingEnabled || claim?.flags?.hidePoweredBy === true;
 
-  if (!settings.brandingEnabled) {
+  const { branding } = resolveEnvelopeBranding({ brandingSnapshot, liveBranding: settings });
+
+  if (!branding.enabled) {
     allowCustomBranding = false;
   }
 
@@ -47,13 +58,10 @@ export const loadRecipientBrandingByTeamId = async ({
     };
   }
 
-  // brandingColors is stored as JSON; parse defensively. Drop unknown keys via Zod.
-  const parsedColors = settings.brandingColors ? ZCssVarsSchema.safeParse(settings.brandingColors) : null;
-
   return {
     allowCustomBranding: true,
     hidePoweredBy,
-    colors: parsedColors?.success ? parsedColors.data : null,
-    css: settings.brandingCss && settings.brandingCss.length > 0 ? settings.brandingCss : null,
+    colors: branding.colors,
+    css: branding.css.length > 0 ? branding.css : null,
   };
 };

@@ -43,6 +43,7 @@ import { mapSecondaryIdToTemplateId } from '../../utils/envelope';
 import { getRecipientsWithMissingFields } from '../../utils/recipients';
 import { sendDocument } from '../document/send-document';
 import { validateFieldAuth } from '../document/validate-field-auth';
+import { buildEnvelopeBrandingSnapshot } from '../envelope/branding-snapshot';
 import { incrementDocumentId } from '../envelope/increment-id';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
 import { resolveSignatureLevel } from '../signature-level/resolve-signature-level';
@@ -386,6 +387,12 @@ export const createDocumentFromDirectTemplate = async ({
         status: DocumentStatus.PENDING,
         externalId: directTemplateExternalId,
         visibility: settings.documentVisibility,
+
+        // Pin the branding for the whole life of the envelope.
+        brandingSnapshot: buildEnvelopeBrandingSnapshot({
+          teamId: directTemplateEnvelope.teamId,
+          settings,
+        }),
         envelopeItems: {
           createMany: {
             data: envelopeItemsToCreate,

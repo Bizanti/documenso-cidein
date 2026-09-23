@@ -2,7 +2,7 @@ import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session
 import { EnvelopeRenderProvider } from '@documenso/lib/client-only/providers/envelope-render-provider';
 import { useOptionalSession } from '@documenso/lib/client-only/providers/session';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
-import { loadRecipientBrandingByTeamId } from '@documenso/lib/server-only/branding/load-recipient-branding';
+import { loadRecipientBranding } from '@documenso/lib/server-only/branding/load-recipient-branding';
 import { getEnvelopeForDirectTemplateSigning } from '@documenso/lib/server-only/envelope/get-envelope-for-direct-template-signing';
 import { getTemplateByDirectLinkToken } from '@documenso/lib/server-only/template/get-template-by-direct-link-token';
 import { DocumentAccessAuth } from '@documenso/lib/types/document-auth';
@@ -149,6 +149,7 @@ export async function loader(loaderArgs: Route.LoaderArgs) {
     select: {
       internalVersion: true,
       teamId: true,
+      brandingSnapshot: true,
     },
   });
 
@@ -156,8 +157,9 @@ export async function loader(loaderArgs: Route.LoaderArgs) {
     throw new Response('Not Found', { status: 404 });
   }
 
-  const branding = await loadRecipientBrandingByTeamId({
+  const branding = await loadRecipientBranding({
     teamId: directEnvelope.teamId,
+    brandingSnapshot: directEnvelope.brandingSnapshot,
   });
 
   if (directEnvelope.internalVersion === 2) {

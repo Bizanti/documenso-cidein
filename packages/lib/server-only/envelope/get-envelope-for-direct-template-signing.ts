@@ -8,6 +8,7 @@ import { extractDocumentAuthMethods } from '../../utils/document-auth';
 import { getRecipientsWithMissingFields } from '../../utils/recipients';
 import { extractFieldAutoInsertValues } from '../document/send-document';
 import { getTeamSettings } from '../team/get-team-settings';
+import { resolveSigningBranding } from './branding-snapshot';
 import type { EnvelopeForSigningResponse } from './get-envelope-for-recipient-signing';
 import { ZEnvelopeForSigningResponse } from './get-envelope-for-recipient-signing';
 
@@ -139,6 +140,14 @@ export const getEnvelopeForDirectTemplateSigning = async ({
 
   const settings = await getTeamSettings({ teamId: envelope.teamId });
 
+  // The envelope is rendered with the branding it was pinned to, not with the
+  // settings live at this moment.
+  const signingBranding = await resolveSigningBranding({
+    teamId: envelope.teamId,
+    brandingSnapshot: envelope.brandingSnapshot,
+    liveBranding: settings,
+  });
+
   const sender = settings.includeSenderDetails
     ? {
         email: envelope.user.email,
@@ -176,8 +185,7 @@ export const getEnvelopeForDirectTemplateSigning = async ({
     sender,
     settings: {
       includeSenderDetails: settings.includeSenderDetails,
-      brandingEnabled: settings.brandingEnabled,
-      brandingLogo: settings.brandingLogo,
+      ...signingBranding,
     },
   } satisfies EnvelopeForSigningResponse);
 };
