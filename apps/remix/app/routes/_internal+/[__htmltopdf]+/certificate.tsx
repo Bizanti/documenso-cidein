@@ -1,10 +1,9 @@
-import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
 import { APP_I18N_OPTIONS, ZSupportedLanguageCodeSchema } from '@documenso/lib/constants/i18n';
 import { RECIPIENT_ROLE_SIGNING_REASONS, RECIPIENT_ROLES_DESCRIPTION } from '@documenso/lib/constants/recipient-roles';
 import { unsafeGetEntireEnvelope } from '@documenso/lib/server-only/admin/get-entire-document';
 import { decryptSecondaryData } from '@documenso/lib/server-only/crypto/decrypt';
 import { getDocumentCertificateAuditLogs } from '@documenso/lib/server-only/document/get-document-certificate-audit-logs';
-import { getOrganisationClaimByTeamId } from '@documenso/lib/server-only/organisation/get-organisation-claims';
+import { resolveDocumentBranding, toBrandLogoDataUrl } from '@documenso/lib/server-only/pdf/document-branding';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
 import { extractDocumentAuthMethods } from '@documenso/lib/utils/document-auth';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
@@ -20,7 +19,6 @@ import { redirect } from 'react-router';
 import { prop, sortBy } from 'remeda';
 import { match } from 'ts-pattern';
 import { UAParser } from 'ua-parser-js';
-import { renderSVG } from 'uqr';
 
 import { BrandingLogo } from '~/components/general/branding-logo';
 
@@ -58,7 +56,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw redirect('/');
   }
 
-  const organisationClaim = await getOrganisationClaimByTeamId({ teamId: envelope.teamId });
+  // The certificate is rendered with the brand the envelope is pinned to, not
+  // with the live settings, so a regeneration cannot change what the sealed
+  // document already shows.
+  const branding = await resolveDocumentBranding({
+    teamId: envelope.teamId,
+    brandingSnapshot: envelope.brandingSnapshot,
+  });
 
   const documentLanguage = ZSupportedLanguageCodeSchema.parse(envelope.documentMeta?.language);
 
@@ -77,7 +81,6 @@ export async function loader({ request }: Route.LoaderArgs) {
         name: envelope.user.name,
         email: envelope.user.email,
       },
-      qrToken: envelope.qrToken,
       authOptions: envelope.authOptions,
       recipients: envelope.recipients,
       createdAt: envelope.createdAt,
@@ -85,7 +88,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       deletedAt: envelope.deletedAt,
       documentMeta: envelope.documentMeta,
     },
-    hidePoweredBy: organisationClaim.flags.hidePoweredBy,
+    brandingLogoUrl: branding.logo ? toBrandLogoDataUrl(branding.logo) : null,
+    hidePoweredBy: branding.hidePoweredBy,
     documentLanguage,
     auditLogs,
     messages,
@@ -102,7 +106,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  * Update: Maybe <Trans> tags work now after RR7 migration.
  */
 export default function SigningCertificate({ loaderData }: Route.ComponentProps) {
-  const { document, documentLanguage, hidePoweredBy, auditLogs, messages } = loaderData;
+  const { document, documentLanguage, hidePoweredBy, brandingLogoUrl, auditLogs, messages } = loaderData;
 
   const { i18n, _ } = useLingui();
 
@@ -363,25 +367,20 @@ export default function SigningCertificate({ loaderData }: Route.ComponentProps)
         </CardContent>
       </Card>
 
-      {!hidePoweredBy && (
-        <div className="my-8 flex-row-reverse space-y-4">
-          <div className="flex items-end justify-end gap-x-4">
-            <div
-              className="flex h-24 w-24 justify-center"
-              dangerouslySetInnerHTML={{
-                __html: renderSVG(`${NEXT_PUBLIC_WEBAPP_URL()}/share/${document.qrToken}`, {
-                  ecc: 'Q',
-                }),
-              }}
-            />
-          </div>
+      {(brandingLogoUrl || !hidePoweredBy) && (
+        <div className="my-8 flex items-end justify-end gap-x-4">
+          <p className="flex-shrink-0 font-medium text-sm print:text-xs">{_(msg`Signing certificate provided by`)}:</p>
 
-          <div className="flex items-end justify-end gap-x-4">
-            <p className="flex-shrink-0 font-medium text-sm print:text-xs">
-              {_(msg`Signing certificate provided by`)}:
-            </p>
-            <BrandingLogo className="max-h-6 print:max-h-4" />
-          </div>
+          {brandingLogoUrl ? (
+            <img
+              src={brandingLogoUrl}
+              alt="Brand logo"
+              data-testid="certificate-brand-logo"
+              className="max-h-6 print:max-h-4"
+            />
+          ) : (
+            <BrandingLogo data-testid="certificate-brand-logo" className="max-h-6 print:max-h-4" />
+          )}
         </div>
       )}
     </div>

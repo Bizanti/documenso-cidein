@@ -1,8 +1,6 @@
 // sort-imports-ignore
 import '../konva/skia-backend';
 
-import fs from 'node:fs';
-import path from 'node:path';
 import type { Canvas } from '@documenso/skia-canvas';
 import { Image as SkiaImage } from '@documenso/skia-canvas';
 import type { I18n } from '@lingui/core';
@@ -12,14 +10,12 @@ import { SigningStatus } from '@prisma/client';
 import Konva from 'konva';
 import { DateTime } from 'luxon';
 import { UAParser } from 'ua-parser-js';
-import { renderSVG } from 'uqr';
 
-import { NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
 import { APP_I18N_OPTIONS } from '../../constants/i18n';
 import { getSignatureFontFamily } from '../../constants/pdf';
 import { RECIPIENT_ROLE_SIGNING_REASONS, RECIPIENT_ROLES_DESCRIPTION } from '../../constants/recipient-roles';
 import type { TDocumentAuditLogBaseSchema } from '../../types/document-audit-logs';
-import { svgToPng } from '../../utils/images/svg-to-png';
+import { readFallbackBrandLogo, renderBrandLogoImage } from './brand-logo';
 import { ensureFontLibrary } from './helpers';
 
 type ColumnWidths = [number, number, number];
@@ -49,7 +45,12 @@ export type CertificateRecipient = {
 type GenerateCertificateOptions = {
   recipients: CertificateRecipient[];
   envelopeId: string;
-  qrToken: string | null;
+
+  /**
+   * The pinned brand logo of the envelope, applied to the certificate before it
+   * is sealed. Null falls back to the Documenso mark.
+   */
+  brandingLogo: Buffer | null;
   hidePoweredBy: boolean;
   i18n: I18n;
   envelopeOwner: {
@@ -565,7 +566,15 @@ const renderRow = (options: RenderRowOptions) => {
   return rowGroup;
 };
 
-const renderBranding = async ({ qrToken, i18n }: { qrToken: string | null; i18n: I18n }) => {
+/**
+ * The brand mark of the certificate: the pinned brand logo of the envelope, or
+ * the Documenso mark when the envelope is not branded.
+ *
+ * There is deliberately no QR code: the plan forbids adding machine-readable
+ * codes to the document, and the certificate is covered by the X.509 signature
+ * rather than by a link back to the platform.
+ */
+const renderBranding = ({ brandingLogo, i18n }: { brandingLogo: Buffer | null; i18n: I18n }) => {
   const branding = new Konva.Group();
 
   const brandingHeight = 12;
@@ -580,47 +589,18 @@ const renderBranding = async ({ qrToken, i18n }: { qrToken: string | null; i18n:
     height: brandingHeight,
   });
 
-  const logoPath = path.join(process.cwd(), 'public/static/logo.png');
-  const logo = fs.readFileSync(logoPath);
+  branding.add(text);
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  const img = new SkiaImage(logo) as unknown as HTMLImageElement;
+  const logoX = text.width() + 16;
 
-  const documensoImage = new Konva.Image({
-    image: img,
-    height: brandingHeight,
-    width: brandingHeight * (img.width / img.height),
-    x: text.width() + 16,
-  });
+  const logoImage =
+    (brandingLogo ? renderBrandLogoImage({ logo: brandingLogo, height: brandingHeight, x: logoX }) : null) ??
+    // A brand logo which cannot be decoded must never break the seal, so the
+    // certificate falls back to the Documenso mark.
+    renderBrandLogoImage({ logo: readFallbackBrandLogo(), height: brandingHeight, x: logoX });
 
-  const qrSize = qrToken ? 72 : 0;
-
-  const logoGroup = new Konva.Group({
-    y: qrSize + 16,
-  });
-  logoGroup.add(text);
-  logoGroup.add(documensoImage);
-
-  branding.add(logoGroup);
-
-  if (qrToken) {
-    const qrSvg = renderSVG(`${NEXT_PUBLIC_WEBAPP_URL()}/share/${qrToken}`, {
-      ecc: 'Q',
-    });
-
-    const svgImage = await svgToPng(qrSvg);
-
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-    const qrSkiaImage = new SkiaImage(svgImage) as unknown as HTMLImageElement;
-    const qrImage = new Konva.Image({
-      image: qrSkiaImage,
-      height: qrSize,
-      width: qrSize,
-      x: branding.getClientRect().width - qrSize,
-      y: 0,
-    });
-
-    branding.add(qrImage);
+  if (logoImage) {
+    branding.add(logoImage);
   }
 
   return branding;
@@ -718,7 +698,7 @@ const renderTables = (options: RenderTablesOptions) => {
 export async function renderCertificate({
   recipients,
   envelopeId,
-  qrToken,
+  brandingLogo,
   hidePoweredBy,
   i18n,
   envelopeOwner,
@@ -754,13 +734,18 @@ export async function renderCertificate({
 
   const tables = renderTables({ groupedRows, columnWidths, i18n });
 
-  const brandingGroup = await renderBranding({ qrToken, i18n });
-  const brandingRect = brandingGroup.getClientRect();
+  // The brand mark is the pinned brand logo of the envelope, and it is only
+  // omitted when the organisation hides the Documenso mark on an unbranded
+  // document.
+  const shouldRenderBranding = brandingLogo !== null || !hidePoweredBy;
+
+  const brandingGroup = shouldRenderBranding ? renderBranding({ brandingLogo, i18n }) : null;
+  const brandingRect = brandingGroup?.getClientRect() ?? null;
   const brandingTopPadding = 24;
 
   const pages: Uint8Array[] = [];
 
-  let isQrPlaced = false;
+  let isBrandingPlaced = false;
 
   // Add a table to each page.
   for (const [index, table] of tables.entries()) {
@@ -788,8 +773,8 @@ export async function renderCertificate({
     group.add(titleText);
     group.add(table);
 
-    // Add QR code and branding on the last page if there is space.
-    if (index === tables.length - 1 && !hidePoweredBy) {
+    // Add the brand mark on the last page if there is space.
+    if (index === tables.length - 1 && brandingGroup && brandingRect) {
       const remainingHeight = pageHeight - group.getClientRect().height - pageBottomMargin;
 
       if (brandingRect.height + brandingTopPadding <= remainingHeight) {
@@ -799,7 +784,7 @@ export async function renderCertificate({
         } satisfies Partial<Konva.GroupConfig>);
 
         page.add(brandingGroup);
-        isQrPlaced = true;
+        isBrandingPlaced = true;
       }
     }
 
@@ -822,8 +807,8 @@ export async function renderCertificate({
     pages.push(new Uint8Array(buffer));
   }
 
-  // Need to create an empty page for the QR code if it hasn't been placed yet.
-  if (!hidePoweredBy && !isQrPlaced) {
+  // Need to create an empty page for the brand mark if it hasn't been placed yet.
+  if (brandingGroup && brandingRect && !isBrandingPlaced) {
     const page = new Konva.Layer();
 
     brandingGroup.setAttrs({

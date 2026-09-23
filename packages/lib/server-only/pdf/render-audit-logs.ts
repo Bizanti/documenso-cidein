@@ -1,10 +1,7 @@
 // sort-imports-ignore
 import '../konva/skia-backend';
 
-import fs from 'node:fs';
-import path from 'node:path';
 import type { Canvas } from '@documenso/skia-canvas';
-import { Image as SkiaImage } from '@documenso/skia-canvas';
 import type { I18n } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import type { DocumentMeta, Envelope, RecipientRole } from '@prisma/client';
@@ -20,6 +17,7 @@ import { RECIPIENT_ROLES_DESCRIPTION } from '../../constants/recipient-roles';
 import type { TDocumentAuditLog } from '../../types/document-audit-logs';
 import { DOCUMENT_AUDIT_LOG_TYPE } from '../../types/document-audit-logs';
 import { formatDocumentAuditLogAction } from '../../utils/document-audit-logs';
+import { readFallbackBrandLogo, renderBrandLogoImage } from './brand-logo';
 import { ensureFontLibrary } from './helpers';
 
 export type AuditLogRecipient = {
@@ -36,6 +34,12 @@ type GenerateAuditLogsOptions = {
   envelopeItems: string[];
   recipients: AuditLogRecipient[];
   auditLogs: TDocumentAuditLog[];
+
+  /**
+   * The pinned brand logo of the envelope, applied to the audit log before it
+   * is sealed. Null falls back to the Documenso mark.
+   */
+  brandingLogo: Buffer | null;
   hidePoweredBy: boolean;
   pageWidth: number;
   pageHeight: number;
@@ -437,24 +441,25 @@ const renderRow = (options: RenderRowOptions) => {
   return rowGroup;
 };
 
-const renderBranding = () => {
+/**
+ * The brand mark of the audit log: the pinned brand logo of the envelope, or
+ * the Documenso mark when the envelope is not branded.
+ */
+const renderBranding = ({ brandingLogo }: { brandingLogo: Buffer | null }) => {
   const branding = new Konva.Group();
 
   const brandingHeight = 16;
 
-  const logoPath = path.join(process.cwd(), 'public/static/logo.png');
-  const logo = fs.readFileSync(logoPath);
+  const brandingImage =
+    (brandingLogo ? renderBrandLogoImage({ logo: brandingLogo, height: brandingHeight }) : null) ??
+    // A brand logo which cannot be decoded must never break the seal, so the
+    // audit log falls back to the Documenso mark.
+    renderBrandLogoImage({ logo: readFallbackBrandLogo(), height: brandingHeight });
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-  const img = new SkiaImage(logo) as unknown as HTMLImageElement;
+  if (brandingImage) {
+    branding.add(brandingImage);
+  }
 
-  const brandingImage = new Konva.Image({
-    image: img,
-    height: brandingHeight,
-    width: brandingHeight * (img.width / img.height),
-  });
-
-  branding.add(brandingImage);
   return branding;
 };
 
@@ -569,6 +574,7 @@ export async function renderAuditLogs({
   pageWidth,
   pageHeight,
   i18n,
+  brandingLogo,
   hidePoweredBy,
 }: GenerateAuditLogsOptions) {
   ensureFontLibrary();
@@ -605,8 +611,13 @@ export async function renderAuditLogs({
     overviewCard,
   });
 
-  const brandingGroup = renderBranding();
-  const brandingRect = brandingGroup.getClientRect();
+  // The brand mark is the pinned brand logo of the envelope, and it is only
+  // omitted when the organisation hides the Documenso mark on an unbranded
+  // document.
+  const shouldRenderBranding = brandingLogo !== null || !hidePoweredBy;
+
+  const brandingGroup = shouldRenderBranding ? renderBranding({ brandingLogo }) : null;
+  const brandingRect = brandingGroup?.getClientRect() ?? null;
   const brandingTopPadding = 24;
 
   const pages: Uint8Array[] = [];
@@ -630,8 +641,8 @@ export async function renderAuditLogs({
 
     page.add(pageGroup);
 
-    // Add branding on the last page if there is space.
-    if (index === pageGroups.length - 1 && !hidePoweredBy) {
+    // Add the brand mark on the last page if there is space.
+    if (index === pageGroups.length - 1 && brandingGroup && brandingRect) {
       const remainingHeight = pageHeight - pageGroup.getClientRect().height - pageBottomMargin;
 
       if (brandingRect.height + brandingTopPadding <= remainingHeight) {
@@ -653,8 +664,8 @@ export async function renderAuditLogs({
     pages.push(new Uint8Array(buffer));
   }
 
-  // Need to create an empty page for the branding if it hasn't been placed yet.
-  if (!hidePoweredBy && !isBrandingPlaced) {
+  // Need to create an empty page for the brand mark if it hasn't been placed yet.
+  if (brandingGroup && brandingRect && !isBrandingPlaced) {
     stage.destroyChildren();
     const page = new Konva.Layer();
 
