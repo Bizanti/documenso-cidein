@@ -83,6 +83,7 @@ export const send2FATokenEmail = async ({ token, envelopeId }: Send2FATokenEmail
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: envelope.documentMeta,
   });
