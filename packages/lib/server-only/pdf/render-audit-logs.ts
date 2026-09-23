@@ -20,7 +20,7 @@ import { formatDocumentAuditLogAction } from '../../utils/document-audit-logs';
 import { readFallbackBrandLogo, renderBrandLogoImage } from './brand-logo';
 import type { TDocumentBranding } from './document-branding';
 import { shouldRenderBrandMark } from './document-branding';
-import { ensureFontLibrary } from './helpers';
+import { ensureFontLibrary, rightAlignWithinContent } from './helpers';
 
 export type AuditLogRecipient = {
   id: number;
@@ -442,20 +442,32 @@ const renderRow = (options: RenderRowOptions) => {
   return rowGroup;
 };
 
+type RenderAuditLogBrandMarkOptions = {
+  brandingLogo: Buffer | null;
+
+  /** Width of the content column the mark must fit in. */
+  contentWidth: number;
+};
+
 /**
  * The brand mark of the audit log: the pinned brand logo of the envelope, or
  * the Documenso mark when the envelope is not branded.
+ *
+ * The logo is capped to the content column, so a logo too wide for the page
+ * shrinks instead of running past its edge.
  */
-const renderBranding = ({ brandingLogo }: { brandingLogo: Buffer | null }) => {
+export const renderAuditLogBrandMark = ({ brandingLogo, contentWidth }: RenderAuditLogBrandMarkOptions) => {
   const branding = new Konva.Group();
 
   const brandingHeight = 16;
 
   const brandingImage =
-    (brandingLogo ? renderBrandLogoImage({ logo: brandingLogo, height: brandingHeight }) : null) ??
+    (brandingLogo
+      ? renderBrandLogoImage({ logo: brandingLogo, height: brandingHeight, maxWidth: contentWidth })
+      : null) ??
     // A brand logo which cannot be decoded must never break the seal, so the
     // audit log falls back to the Documenso mark.
-    renderBrandLogoImage({ logo: readFallbackBrandLogo(), height: brandingHeight });
+    renderBrandLogoImage({ logo: readFallbackBrandLogo(), height: brandingHeight, maxWidth: contentWidth });
 
   if (brandingImage) {
     branding.add(brandingImage);
@@ -613,9 +625,10 @@ export async function renderAuditLogs({
 
   // The brand mark is the pinned brand logo of the envelope, and it is only
   // omitted when the organisation hides the Documenso mark on an unbranded
-  // document.
+  // document. It is built for the width of the content column, so the logo can
+  // never outgrow the page it is drawn on.
   const brandingGroup = shouldRenderBrandMark(branding)
-    ? renderBranding({ brandingLogo: branding.logo?.content ?? null })
+    ? renderAuditLogBrandMark({ brandingLogo: branding.logo?.content ?? null, contentWidth })
     : null;
   const brandingRect = brandingGroup?.getClientRect() ?? null;
   const brandingTopPadding = 24;
@@ -647,7 +660,7 @@ export async function renderAuditLogs({
 
       if (brandingRect.height + brandingTopPadding <= remainingHeight) {
         brandingGroup.setAttrs({
-          x: pageWidth - brandingRect.width - margin,
+          x: rightAlignWithinContent({ elementWidth: brandingRect.width, pageWidth, margin }),
           y: pageGroup.getClientRect().height + brandingTopPadding,
         } satisfies Partial<Konva.GroupConfig>);
 
@@ -670,7 +683,7 @@ export async function renderAuditLogs({
     const page = new Konva.Layer();
 
     brandingGroup.setAttrs({
-      x: pageWidth - brandingRect.width - margin,
+      x: rightAlignWithinContent({ elementWidth: brandingRect.width, pageWidth, margin }),
       y: pageTopMargin,
     } satisfies Partial<Konva.GroupConfig>);
 
