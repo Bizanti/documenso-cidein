@@ -1,5 +1,6 @@
 import { authClient } from '@documenso/auth/client';
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
+import { formatPath } from '@documenso/lib/constants/app';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { prisma } from '@documenso/prisma';
 import { Button } from '@documenso/ui/primitives/button';
@@ -53,11 +54,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       url: orgUrl,
     },
     select: {
+      id: true,
       name: true,
       organisationClaim: true,
       organisationAuthenticationPortal: {
         select: {
           enabled: true,
+        },
+      },
+      organisationGlobalSettings: {
+        select: {
+          brandingEnabled: true,
+          brandingLogo: true,
         },
       },
       members: {
@@ -83,8 +91,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw redirect(`/o/${orgUrl}`);
   }
 
+  // The organisation is resolved from the route url, so showing its brand here
+  // is backed by server-side verification. The root `/signin` page stays
+  // neutral: it has no such context to verify against.
+  const hasOrganisationLogo =
+    organisation.organisationGlobalSettings.brandingEnabled &&
+    Boolean(organisation.organisationGlobalSettings.brandingLogo);
+
   return {
     organisationName: organisation.name,
+    organisationLogoUrl: hasOrganisationLogo ? formatPath(`/api/branding/logo/organisation/${organisation.id}`) : null,
     orgUrl,
   };
 }
@@ -92,7 +108,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function OrganisationSignIn({ loaderData }: Route.ComponentProps) {
   const [searchParams] = useSearchParams();
 
-  const { organisationName, orgUrl } = loaderData;
+  const { organisationName, organisationLogoUrl, orgUrl } = loaderData;
 
   const { t } = useLingui();
   const { toast } = useToast();
@@ -155,6 +171,14 @@ export default function OrganisationSignIn({ loaderData }: Route.ComponentProps)
   return (
     <div className="w-screen max-w-lg px-4">
       <div className="z-10 rounded-xl border border-border bg-neutral-100 p-6 dark:bg-background">
+        {organisationLogoUrl && (
+          <img
+            src={organisationLogoUrl}
+            alt={organisationName}
+            className="mb-4 max-h-10 w-auto max-w-full object-contain"
+          />
+        )}
+
         <h1 className="font-semibold text-2xl">
           <Trans>Welcome to {organisationName}</Trans>
         </h1>

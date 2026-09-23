@@ -1,10 +1,11 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
 import { useAnalytics } from '@documenso/lib/client-only/hooks/use-analytics';
 import { SessionProvider } from '@documenso/lib/client-only/providers/session';
-import { getBasePath } from '@documenso/lib/constants/app';
+import { formatPath, getBasePath } from '@documenso/lib/constants/app';
 import { APP_I18N_OPTIONS, type SupportedLanguageCodes } from '@documenso/lib/constants/i18n';
 import { createPublicEnv } from '@documenso/lib/utils/env';
 import { extractLocaleData } from '@documenso/lib/utils/i18n';
+import { prisma } from '@documenso/prisma';
 import { TrpcProvider } from '@documenso/trpc/react';
 import { getOrganisationSession } from '@documenso/trpc/server/organisation-router/get-organisation-session';
 import { Toaster } from '@documenso/ui/primitives/toaster';
@@ -47,6 +48,80 @@ export function meta() {
  */
 export const shouldRevalidate = () => false;
 
+/**
+ * Organisation url of a `/o/:orgUrl/...` request path, or null when the request
+ * is not inside an organisation route.
+ */
+const parseOrganisationUrlFromPath = (pathname: string): string | null => {
+  const basePath = getBasePath();
+
+  // Requests arrive with the base path still attached (`/ESign/o/acme`), while
+  // the routes below are matched without it.
+  const relativePath =
+    basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`))
+      ? pathname.slice(basePath.length)
+      : pathname;
+
+  const match = /^\/o\/([^/]+)(?:\/.*)?$/.exec(relativePath);
+
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Organisation whose favicon may be shown for this request, or null when there
+ * is no verification to back it up.
+ *
+ * The tenant icon is resolved from the database — never from anything the
+ * client declares — and only for `/o/:orgUrl` requests whose url belongs to an
+ * organisation with branding enabled and a logo stored, i.e. exactly what
+ * `api+/branding.favicon.organisation.$orgId.$size` is able to serve. Every
+ * other surface (the `/signin` and `/signup` root pages, invites, signing
+ * pages) stays on the neutral Documenso icon.
+ */
+const getVerifiedFaviconOrganisation = async (request: Request) => {
+  const organisationUrl = parseOrganisationUrlFromPath(new URL(request.url).pathname);
+
+  if (!organisationUrl) {
+    return null;
+  }
+
+  const organisation = await prisma.organisation.findUnique({
+    where: {
+      url: organisationUrl,
+    },
+    select: {
+      id: true,
+      url: true,
+      organisationGlobalSettings: {
+        select: {
+          brandingEnabled: true,
+          brandingLogo: true,
+        },
+      },
+    },
+  });
+
+  if (
+    !organisation?.organisationGlobalSettings.brandingEnabled ||
+    !organisation.organisationGlobalSettings.brandingLogo
+  ) {
+    return null;
+  }
+
+  return {
+    id: organisation.id,
+    url: organisation.url,
+  };
+};
+
 export async function loader({ context, request }: Route.LoaderArgs) {
   const session = await getOptionalSession(request);
 
@@ -68,12 +143,15 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     organisations = await getOrganisationSession({ userId: session.user.id });
   }
 
+  const faviconOrganisation = await getVerifiedFaviconOrganisation(request);
+
   return data(
     {
       lang,
       theme: getTheme(),
       disableAnimations,
       basePath: getBasePath(),
+      faviconOrganisation,
       // Surface the per-request CSP nonce produced by `securityHeadersMiddleware` so all
       // SSR-rendered <script>/<style> elements in this layout (and child
       // routes that need it) can carry the matching nonce attribute.
@@ -126,6 +204,16 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
   const matches = useMatches();
   const isRecipientRoute = matches.some((m) => m.id?.startsWith('routes/_recipient+'));
 
+  // The tenant favicon is only shown while the matched route still belongs to
+  // the organisation the loader verified for this document load. Root data is
+  // never revalidated (see `shouldRevalidate`), so without this check an icon
+  // resolved on a full page load would follow in-app navigation into another
+  // organisation — or into the neutral login — and misrepresent the context.
+  const faviconOrganisation =
+    data.faviconOrganisation && matches.some((m) => m.params.orgUrl === data.faviconOrganisation?.url)
+      ? data.faviconOrganisation
+      : null;
+
   return (
     // `suppressHydrationWarning` because `remix-themes` intentionally mutates
     // `data-theme`/`class` on <html> before hydration (PreventFlashOnWrongTheme),
@@ -134,9 +222,36 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
     <html translate="no" lang={lang} data-theme={theme} className={theme ?? ''} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <link rel="apple-touch-icon" sizes="180x180" href={`${basePath}/apple-touch-icon.png`} />
-        <link rel="icon" type="image/png" sizes="32x32" href={`${basePath}/favicon-32x32.png`} />
-        <link rel="icon" type="image/png" sizes="16x16" href={`${basePath}/favicon-16x16.png`} />
+        {faviconOrganisation ? (
+          <>
+            <link
+              rel="apple-touch-icon"
+              sizes="180x180"
+              href={formatPath(`/api/branding/favicon/organisation/${faviconOrganisation.id}/180`)}
+            />
+            <link
+              rel="icon"
+              type="image/png"
+              sizes="32x32"
+              href={formatPath(`/api/branding/favicon/organisation/${faviconOrganisation.id}/32`)}
+            />
+            <link
+              rel="icon"
+              type="image/png"
+              sizes="16x16"
+              href={formatPath(`/api/branding/favicon/organisation/${faviconOrganisation.id}/16`)}
+            />
+          </>
+        ) : (
+          // Neutral Documenso icons: the fallback for every context without a
+          // verified organisation, and what the dynamic route redirects to when
+          // it cannot resolve a tenant icon.
+          <>
+            <link rel="apple-touch-icon" sizes="180x180" href={`${basePath}/apple-touch-icon.png`} />
+            <link rel="icon" type="image/png" sizes="32x32" href={`${basePath}/favicon-32x32.png`} />
+            <link rel="icon" type="image/png" sizes="16x16" href={`${basePath}/favicon-16x16.png`} />
+          </>
+        )}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="manifest" href={`${basePath}/site.webmanifest`} />
         <meta name="google" content="notranslate" />
