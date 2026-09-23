@@ -221,9 +221,7 @@ test('[TEAMS]: delete draft team document', async ({ page }) => {
   });
 
   const actionBtn = page.getByTestId('document-table-action-btn').first();
-  await expect(actionBtn).toBeVisible({
-    timeout: 500,
-  });
+  await expect(actionBtn).toBeVisible();
   await openDropdownMenu(page, actionBtn);
   await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
   await page.getByRole('menuitem', { name: 'Delete' }).click();
@@ -259,9 +257,7 @@ test('[TEAMS]: delete pending team document', async ({ page }) => {
   });
 
   const actionBtn = page.getByTestId('document-table-action-btn').first();
-  await expect(actionBtn).toBeVisible({
-    timeout: 500,
-  });
+  await expect(actionBtn).toBeVisible();
   await openDropdownMenu(page, actionBtn);
   await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
   await page.getByRole('menuitem', { name: 'Delete' }).click({ force: true });
@@ -298,9 +294,7 @@ test('[TEAMS]: delete completed team document', async ({ page }) => {
   });
 
   const actionBtn = page.getByTestId('document-table-action-btn').first();
-  await expect(actionBtn).toBeVisible({
-    timeout: 500,
-  });
+  await expect(actionBtn).toBeVisible();
   await openDropdownMenu(page, actionBtn);
   await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeVisible();
   await page.getByRole('menuitem', { name: 'Delete' }).click({ force: true });

@@ -3,6 +3,12 @@ description: 'Install playwright'
 runs:
   using: 'composite'
   steps:
+    - name: Cache playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-browsers-${{ runner.os }}-${{ hashFiles('packages/app-tests/package.json') }}
+
     - name: Install playwright
       run: npx playwright install --with-deps
       shell: bash
