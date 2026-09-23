@@ -6,13 +6,27 @@
 -- DDL of 20260923120000 commits first, so a failed backfill can be retried
 -- without re-running the schema change.
 --
--- The query mirrors `getTeamSettings` + `extractDerivedTeamSettings`
--- (packages/lib/utils/teams.ts): the team value wins per field, the
--- organisation value is used otherwise, and the organisation defaults apply
--- when a settings row is missing. It writes the same shape as
--- `buildEnvelopeBrandingSnapshot`
+-- The query mirrors the branding resolution of `getTeamSettings`
+-- (packages/lib/server-only/team/get-team-settings.ts:36-46) followed by
+-- `extractDerivedTeamSettings` (packages/lib/utils/teams.ts), and writes the
+-- same shape as `buildEnvelopeBrandingSnapshot`
 -- (packages/lib/server-only/envelope/branding-snapshot.ts), which pins the
 -- branding for envelopes created from now on.
+--
+-- Resolution rules, field by field:
+--
+-- | team `brandingEnabled` | team field          | resolved value       |
+-- | ---------------------- | ------------------- | -------------------- |
+-- | NULL (inherits)        | ignored, always     | organisation value   |
+-- | set                    | not NULL            | team value           |
+-- | set                    | NULL                | organisation value   |
+--
+-- The first row is the "inherit all" branch: while a team has no explicit
+-- `brandingEnabled` it inherits ALL six fields from the organisation, so a team
+-- value left over from an earlier state is ignored. That state is reachable —
+-- `update-team-branding-logo` writes `brandingLogo` without touching
+-- `brandingEnabled` — and resolving it per field would pin the team logo while
+-- the signer was being shown the organisation logo.
 --
 -- Finalised envelopes (COMPLETED/REJECTED/CANCELLED) are deliberately skipped:
 -- resolving today's brand for them would record a version the signer never saw.
@@ -22,12 +36,30 @@ WITH resolved AS (
   SELECT
     e."id" AS envelope_id,
     e."teamId" AS team_id,
-    COALESCE(tgs."brandingEnabled", ogs."brandingEnabled", false) AS enabled,
-    COALESCE(tgs."brandingLogo", ogs."brandingLogo", '') AS logo,
-    COALESCE(tgs."brandingUrl", ogs."brandingUrl", '') AS url,
-    COALESCE(tgs."brandingCompanyDetails", ogs."brandingCompanyDetails", '') AS company_details,
-    COALESCE(tgs."brandingColors", ogs."brandingColors") AS colors,
-    COALESCE(tgs."brandingCss", ogs."brandingCss", '') AS css
+    CASE
+      WHEN tgs."brandingEnabled" IS NULL THEN COALESCE(ogs."brandingEnabled", false)
+      ELSE COALESCE(tgs."brandingEnabled", ogs."brandingEnabled", false)
+    END AS enabled,
+    CASE
+      WHEN tgs."brandingEnabled" IS NULL THEN COALESCE(ogs."brandingLogo", '')
+      ELSE COALESCE(tgs."brandingLogo", ogs."brandingLogo", '')
+    END AS logo,
+    CASE
+      WHEN tgs."brandingEnabled" IS NULL THEN COALESCE(ogs."brandingUrl", '')
+      ELSE COALESCE(tgs."brandingUrl", ogs."brandingUrl", '')
+    END AS url,
+    CASE
+      WHEN tgs."brandingEnabled" IS NULL THEN COALESCE(ogs."brandingCompanyDetails", '')
+      ELSE COALESCE(tgs."brandingCompanyDetails", ogs."brandingCompanyDetails", '')
+    END AS company_details,
+    CASE
+      WHEN tgs."brandingEnabled" IS NULL THEN ogs."brandingColors"
+      ELSE COALESCE(tgs."brandingColors", ogs."brandingColors")
+    END AS colors,
+    CASE
+      WHEN tgs."brandingEnabled" IS NULL THEN COALESCE(ogs."brandingCss", '')
+      ELSE COALESCE(tgs."brandingCss", ogs."brandingCss", '')
+    END AS css
   FROM "Envelope" e
   JOIN "Team" t ON t."id" = e."teamId"
   LEFT JOIN "Organisation" o ON o."id" = t."organisationId"
