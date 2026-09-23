@@ -24,7 +24,12 @@ export const zfdFile = () => {
 
 /**
  * A `zfd.file()` schema constrained to branding-logo images: size-limited and
- * restricted to a MIME allowlist. Use for server-side branding logo uploads.
+ * restricted to the PNG MIME type. Use for server-side branding logo uploads.
+ *
+ * The declared content type is only a cheap first filter — it is supplied by the
+ * client. The real format (and the source dimensions) are verified from the raw
+ * bytes by `assertValidBrandingLogoSource`, which the branding logo routes run
+ * before anything is stored.
  */
 export const zfdBrandingImageFile = () => {
   return zfd
@@ -33,7 +38,7 @@ export const zfdBrandingImageFile = () => {
       message: `File cannot be larger than ${BRANDING_LOGO_MAX_SIZE_MB}MB`,
     })
     .refine((file) => BRANDING_LOGO_ALLOWED_TYPES.includes(file.type), {
-      message: 'File must be a JPG, PNG, or WebP image',
+      message: 'File must be a PNG image',
     });
 };
 

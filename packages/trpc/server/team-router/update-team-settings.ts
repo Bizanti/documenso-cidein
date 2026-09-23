@@ -1,6 +1,13 @@
+import { IS_BILLING_ENABLED } from '@documenso/lib/constants/app';
 import { ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/organisations';
 import { TEAM_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/teams';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { getOrganisationClaimByTeamId } from '@documenso/lib/server-only/organisation/get-organisation-claims';
+import {
+  canConfigureBranding,
+  hasBrandingSettingsUpdate,
+  isBrandingCssEnabled,
+} from '@documenso/lib/utils/branding-entitlement';
 import { normalizeBrandingColors } from '@documenso/lib/utils/normalize-branding-colors';
 import { buildOrganisationWhereQuery } from '@documenso/lib/utils/organisations';
 import { type SanitizeBrandingCssWarning, sanitizeBrandingCss } from '@documenso/lib/utils/sanitize-branding-css';
@@ -86,6 +93,21 @@ export const updateTeamSettingsRoute = authenticatedProcedure
       });
     }
 
+    // The role check above only covers the team membership. Branding settings
+    // are additionally gated on the organisation's `allowCustomBranding` claim,
+    // so a MANAGE_TEAM member whose plan does not include custom branding
+    // cannot change them by calling this route directly. When billing is
+    // disabled the gate short-circuits to allowed (see `canConfigureBranding`).
+    if (hasBrandingSettingsUpdate(data)) {
+      const claim = IS_BILLING_ENABLED() ? await getOrganisationClaimByTeamId({ teamId }).catch(() => null) : null;
+
+      if (!canConfigureBranding(claim?.flags)) {
+        throw new AppError(AppErrorCode.UNAUTHORIZED, {
+          message: 'Your plan does not allow custom branding.',
+        });
+      }
+    }
+
     // Validate that the email ID belongs to the organisation.
     if (emailId) {
       const email = await prisma.organisationEmail.findFirst({
@@ -133,15 +155,22 @@ export const updateTeamSettingsRoute = authenticatedProcedure
     // for teams, so only run the sanitiser when an explicit string is provided.
     // An empty string after sanitisation is collapsed to `null` so the team
     // row inherits rather than persisting an empty override.
+    //
+    // Custom CSS is disabled for now (see `isBrandingCssEnabled`): the field is
+    // still accepted by the request schema so existing clients keep working, but
+    // its value is ignored. Leaving `sanitizedBrandingCss` undefined keeps the
+    // stored column untouched.
     let cssWarnings: SanitizeBrandingCssWarning[] | undefined;
     let sanitizedBrandingCss: string | null | undefined;
 
-    if (brandingCss === null) {
-      sanitizedBrandingCss = null;
-    } else if (typeof brandingCss === 'string') {
-      const result = sanitizeBrandingCss(brandingCss);
-      sanitizedBrandingCss = result.css.trim() === '' ? null : result.css;
-      cssWarnings = result.warnings;
+    if (isBrandingCssEnabled() && brandingCss !== undefined) {
+      if (brandingCss === null) {
+        sanitizedBrandingCss = null;
+      } else if (typeof brandingCss === 'string') {
+        const result = sanitizeBrandingCss(brandingCss);
+        sanitizedBrandingCss = result.css.trim() === '' ? null : result.css;
+        cssWarnings = result.warnings;
+      }
     }
 
     // Strip empty-string colour values; collapse to `null` when the payload

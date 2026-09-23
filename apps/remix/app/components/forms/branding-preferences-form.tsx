@@ -1,15 +1,18 @@
 import { useCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
 import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
 import {
+  BRANDING_CSS_MAX_LENGTH,
   BRANDING_LOGO_ALLOWED_TYPES,
   BRANDING_LOGO_MAX_SIZE_BYTES,
   BRANDING_LOGO_MAX_SIZE_MB,
 } from '@documenso/lib/constants/branding';
 import { DEFAULT_BRAND_COLORS, DEFAULT_BRAND_RADIUS } from '@documenso/lib/constants/theme';
 import { ZCssVarsSchema } from '@documenso/lib/types/css-vars';
+import { isBrandingCssEnabled } from '@documenso/lib/utils/branding-entitlement';
 import { normalizeBrandingColors } from '@documenso/lib/utils/normalize-branding-colors';
 import { cn } from '@documenso/ui/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@documenso/ui/primitives/accordion';
+import { Alert, AlertDescription, AlertTitle } from '@documenso/ui/primitives/alert';
 import { Button } from '@documenso/ui/primitives/button';
 import { ColorPicker } from '@documenso/ui/primitives/color-picker';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from '@documenso/ui/primitives/form/form';
@@ -39,13 +42,22 @@ const ZBrandingPreferencesFormSchema = z.object({
       (file) => file.size <= BRANDING_LOGO_MAX_SIZE_BYTES,
       `File size must be less than ${BRANDING_LOGO_MAX_SIZE_MB}MB`,
     )
-    .refine((file) => BRANDING_LOGO_ALLOWED_TYPES.includes(file.type), 'Only .jpg, .png, and .webp files are accepted')
+    .refine((file) => BRANDING_LOGO_ALLOWED_TYPES.includes(file.type), 'Only .png files are accepted')
     .nullish(),
   brandingUrl: z.string().url().optional().or(z.literal('')),
   brandingCompanyDetails: z.string().max(500).optional(),
   brandingColors: ZCssVarsSchema.default({}),
-  brandingCss: z.string().max(10_000).default(''),
+  // Same limit as the server-side schema (`BRANDING_CSS_MAX_LENGTH`) so the
+  // client can never build a payload the settings routes would reject.
+  brandingCss: z.string().max(BRANDING_CSS_MAX_LENGTH).default(''),
 });
+
+/**
+ * Custom CSS is disabled (see `isBrandingCssEnabled`): the textarea is rendered
+ * disabled with a notice instead of being removed, so an existing value stays
+ * visible and the feature can be re-enabled centrally.
+ */
+const isBrandingCssAvailable = isBrandingCssEnabled();
 
 export type TBrandingPreferencesFormSchema = z.infer<typeof ZBrandingPreferencesFormSchema>;
 
@@ -340,7 +352,7 @@ export function BrandingPreferencesForm({
                     </div>
 
                     <FormDescription>
-                      <Trans>Upload your brand logo (max 5MB, JPG, PNG, or WebP)</Trans>
+                      <Trans>Upload your brand logo (PNG, max 1MB and up to 1024x1024 pixels)</Trans>
 
                       {canInherit && (
                         <span>
@@ -610,6 +622,21 @@ export function BrandingPreferencesForm({
                   </AccordionTrigger>
 
                   <AccordionContent className="-mx-1 px-1 pt-4 text-muted-foreground text-sm leading-relaxed">
+                    {!isBrandingCssAvailable && (
+                      <Alert variant="warning" className="mb-4">
+                        <AlertTitle>
+                          <Trans>Custom CSS is disabled</Trans>
+                        </AlertTitle>
+
+                        <AlertDescription>
+                          <Trans>
+                            Custom CSS is disabled for now: a single rule can hide signature states, warnings or
+                            controls. Branding is limited to the logo, brand details and colours.
+                          </Trans>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                     <FormField
                       control={form.control}
                       name="brandingCss"
@@ -622,18 +649,22 @@ export function BrandingPreferencesForm({
   background: red;
 }`}
                               className="min-h-[200px] font-mono text-xs"
+                              data-testid="branding-css-textarea"
                               {...field}
                               value={field.value ?? ''}
+                              disabled={!isBrandingCssAvailable}
                             />
                           </FormControl>
 
-                          <FormDescription>
-                            <Trans>
-                              Custom CSS is sanitised on save. Layout-breaking properties, remote URLs, and
-                              pseudo-elements are stripped automatically. Any rules dropped during sanitisation will be
-                              shown after you save.
-                            </Trans>
-                          </FormDescription>
+                          {isBrandingCssAvailable && (
+                            <FormDescription>
+                              <Trans>
+                                Custom CSS is sanitised on save. Layout-breaking properties, remote URLs, and
+                                pseudo-elements are stripped automatically. Any rules dropped during sanitisation will
+                                be shown after you save.
+                              </Trans>
+                            </FormDescription>
+                          )}
                         </FormItem>
                       )}
                     />

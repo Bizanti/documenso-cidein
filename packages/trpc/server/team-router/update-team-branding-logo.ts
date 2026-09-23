@@ -3,6 +3,7 @@ import { TEAM_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/teams
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { buildBrandingLogoData } from '@documenso/lib/server-only/branding/store-branding-logo';
 import { getOrganisationClaimByTeamId } from '@documenso/lib/server-only/organisation/get-organisation-claims';
+import { assertValidBrandingLogoSource } from '@documenso/lib/utils/images/logo';
 import { buildTeamWhereQuery } from '@documenso/lib/utils/teams';
 import { prisma } from '@documenso/prisma';
 
@@ -52,7 +53,16 @@ export const updateTeamBrandingLogoRoute = authenticatedProcedure
       }
     }
 
-    const brandingLogoValue = brandingLogo ? await buildBrandingLogoData(brandingLogo) : '';
+    // Validate the raw upload before it is re-encoded and stored: size, PNG
+    // signature (the declared MIME type is client-controlled) and source
+    // dimensions.
+    let brandingLogoValue = '';
+
+    if (brandingLogo) {
+      await assertValidBrandingLogoSource(Buffer.from(await brandingLogo.arrayBuffer()));
+
+      brandingLogoValue = await buildBrandingLogoData(brandingLogo);
+    }
 
     await prisma.team.update({
       where: {

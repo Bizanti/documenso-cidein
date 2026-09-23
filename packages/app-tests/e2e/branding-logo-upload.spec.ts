@@ -1,16 +1,23 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
 import { prisma } from '@documenso/prisma';
 import { seedUser } from '@documenso/prisma/seed/users';
 import { expect, type Page, test } from '@playwright/test';
+import sharp from 'sharp';
 
 import { apiSignin } from './fixtures/authentication';
 
 test.describe.configure({ mode: 'parallel' });
 
-const LOGO_PATH = path.join(__dirname, '../../assets/logo.png');
+/**
+ * The shared `packages/assets/logo.png` is a 2248x320 UI asset, and the branding
+ * logo route rejects source images above 1024x1024, so the positive flows build a
+ * conforming fixture (512x512, far below the 1MB limit) instead of uploading it.
+ * Over-cap uploads are covered in `branding-hardening.spec.ts`.
+ */
+const createBrandingLogoFixture = () =>
+  sharp({ create: { width: 512, height: 512, channels: 3, background: { r: 10, g: 20, b: 30 } } })
+    .png()
+    .toBuffer();
 
 type MultipartFile = { name: string; mimeType: string; buffer: Buffer };
 
@@ -19,8 +26,12 @@ const enableBrandingAndUpload = async (page: Page) => {
   await page.getByTestId('enable-branding').click();
   await page.getByRole('option', { name: 'Yes' }).click();
 
-  // Upload the logo file through the real multipart route.
-  await page.locator('input[type="file"]').setInputFiles(LOGO_PATH);
+  // Upload a conforming logo through the real multipart route.
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'logo.png',
+    mimeType: 'image/png',
+    buffer: await createBrandingLogoFixture(),
+  });
 
   await page.getByRole('button', { name: 'Save changes' }).first().click();
   await expect(page.getByText('Your branding preferences have been updated').first()).toBeVisible();
@@ -161,7 +172,7 @@ test('[BRANDING_LOGO]: validates and sanitises the logo on the server', async ({
   const validResponse = await postOrganisationBrandingLogo(page, organisation.id, {
     name: 'logo.png',
     mimeType: 'image/png',
-    buffer: fs.readFileSync(LOGO_PATH),
+    buffer: await createBrandingLogoFixture(),
   });
 
   expect(validResponse.ok()).toBeTruthy();
@@ -212,7 +223,7 @@ test('[BRANDING_LOGO]: rejects setting a logo without the custom-branding entitl
   const response = await postOrganisationBrandingLogo(page, organisation.id, {
     name: 'logo.png',
     mimeType: 'image/png',
-    buffer: fs.readFileSync(LOGO_PATH),
+    buffer: await createBrandingLogoFixture(),
   });
 
   expect(response.ok()).toBeFalsy();
