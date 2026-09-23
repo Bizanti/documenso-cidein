@@ -1,5 +1,6 @@
 import { useCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
-import { IS_BILLING_ENABLED, IS_DOCUMENSO_CLOUD } from '@documenso/lib/constants/app';
+import { IS_DOCUMENSO_CLOUD } from '@documenso/lib/constants/app';
+import { canConfigureBranding, canUseAdvancedBranding } from '@documenso/lib/utils/branding-entitlement';
 import { canExecuteOrganisationAction } from '@documenso/lib/utils/organisations';
 import type { SanitizeBrandingCssWarning } from '@documenso/lib/utils/sanitize-branding-css';
 import { trpc } from '@documenso/trpc/react';
@@ -122,8 +123,7 @@ export default function OrganisationSettingsBrandingPage() {
     ? t`Here you can set branding preferences for your team.`
     : t`Here you can set branding preferences for your organisation. Teams will inherit these settings by default.`;
 
-  const brandingPreferencesFormEnabled =
-    organisationWithSettings.organisationClaim.flags.allowCustomBranding || !IS_BILLING_ENABLED();
+  const brandingPreferencesFormEnabled = canConfigureBranding(organisationWithSettings.organisationClaim.flags);
 
   return (
     <div>
@@ -137,9 +137,7 @@ export default function OrganisationSettingsBrandingPage() {
         <section>
           <BrandingPreferencesForm
             context="Organisation"
-            hasAdvancedBranding={
-              organisationWithSettings.organisationClaim.flags.embedSigningWhiteLabel === true || !IS_BILLING_ENABLED()
-            }
+            hasAdvancedBranding={canUseAdvancedBranding(organisationWithSettings.organisationClaim.flags)}
             settings={organisationWithSettings.organisationGlobalSettings}
             onFormSubmit={onBrandingPreferencesFormSubmit}
           />

@@ -1,4 +1,5 @@
 import type { TCssVarsSchema } from '@documenso/lib/types/css-vars';
+import { isBrandingCssEnabled } from '@documenso/lib/utils/branding-entitlement';
 import { useEffect } from 'react';
 
 import { toNativeCssVarsString } from '~/utils/css-vars';
@@ -18,19 +19,17 @@ export type RecipientBrandingProps = {
  * Renders a `<style nonce>` block for a recipient route, scoped to the
  * `.documenso-branded` wrapper rendered in `_recipient+/_layout.tsx`.
  *
- * Both the CSS variables (from `branding.colors`) and the user's custom CSS
- * (from `branding.css`) are emitted inside a single nested rule so the user
- * doesn't need to scope their own selectors — native CSS nesting handles it:
+ * The brand colour variables (from `branding.colors`) are emitted as a nested
+ * rule so the user doesn't need to scope their own selectors — native CSS
+ * nesting handles it:
  *
  *   .documenso-branded {
  *     --background: ...;
- *     .my-class { color: red; }
  *   }
  *
- * Equivalent to `.documenso-branded .my-class { color: red; }` after expansion.
- *
- * The user's CSS is sanitised at write time (`sanitizeBrandingCss`) and stored
- * in the DB as-is — no per-render parsing.
+ * Custom CSS (`branding.css`) is disabled for now — see `isBrandingCssEnabled` —
+ * so a value stored by an older version is never injected, even though the
+ * branding loader still returns it.
  *
  * Why both SSR `<style>` and a `useEffect` injection?
  *
@@ -50,7 +49,9 @@ export type RecipientBrandingProps = {
 export const RecipientBranding = ({ branding, cspNonce }: RecipientBrandingProps) => {
   const varsString = toNativeCssVarsString(branding?.colors ?? {});
 
-  const userCss = branding?.css ?? '';
+  // Nothing but the colour variables is ever injected while custom CSS is
+  // disabled, even when a legacy row still carries a value.
+  const userCss = isBrandingCssEnabled() ? (branding?.css ?? '') : '';
 
   const hasVars = varsString.trim().length > 0;
   const hasUserCss = userCss.trim().length > 0;

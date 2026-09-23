@@ -1,5 +1,12 @@
+import { IS_BILLING_ENABLED } from '@documenso/lib/constants/app';
 import { ORGANISATION_MEMBER_ROLE_PERMISSIONS_MAP } from '@documenso/lib/constants/organisations';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { getOrganisationClaim } from '@documenso/lib/server-only/organisation/get-organisation-claims';
+import {
+  canConfigureBranding,
+  hasBrandingSettingsUpdate,
+  isBrandingCssEnabled,
+} from '@documenso/lib/utils/branding-entitlement';
 import { normalizeBrandingColors } from '@documenso/lib/utils/normalize-branding-colors';
 import { buildOrganisationWhereQuery } from '@documenso/lib/utils/organisations';
 import { type SanitizeBrandingCssWarning, sanitizeBrandingCss } from '@documenso/lib/utils/sanitize-branding-css';
@@ -82,6 +89,21 @@ export const updateOrganisationSettingsRoute = authenticatedProcedure
       });
     }
 
+    // The role check above only covers the organisation membership. Branding
+    // settings are additionally gated on the `allowCustomBranding` claim, so a
+    // MANAGE_ORGANISATION member whose plan does not include custom branding
+    // cannot change them by calling this route directly. When billing is
+    // disabled the gate short-circuits to allowed (see `canConfigureBranding`).
+    if (hasBrandingSettingsUpdate(data)) {
+      const claim = IS_BILLING_ENABLED() ? await getOrganisationClaim({ organisationId }).catch(() => null) : null;
+
+      if (!canConfigureBranding(claim?.flags)) {
+        throw new AppError(AppErrorCode.UNAUTHORIZED, {
+          message: 'Your plan does not allow custom branding.',
+        });
+      }
+    }
+
     // Validate that the email ID belongs to the organisation.
     if (emailId) {
       const email = await prisma.organisationEmail.findFirst({
@@ -132,10 +154,15 @@ export const updateOrganisationSettingsRoute = authenticatedProcedure
     // Sanitize custom branding CSS at write time so we can store the safe
     // result and skip per-render sanitisation. Warnings are returned to the
     // UI so the user can see what was dropped.
+    //
+    // Custom CSS is disabled for now (see `isBrandingCssEnabled`): the field is
+    // still accepted by the request schema so existing clients keep working, but
+    // its value is ignored. Leaving `sanitizedBrandingCss` undefined keeps the
+    // stored column untouched.
     let cssWarnings: SanitizeBrandingCssWarning[] | undefined;
     let sanitizedBrandingCss: string | undefined;
 
-    if (brandingCss !== undefined) {
+    if (isBrandingCssEnabled() && brandingCss !== undefined) {
       const result = sanitizeBrandingCss(brandingCss);
       sanitizedBrandingCss = result.css;
       cssWarnings = result.warnings;

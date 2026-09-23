@@ -1,5 +1,6 @@
 import { useCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
-import { IS_BILLING_ENABLED, IS_DOCUMENSO_CLOUD } from '@documenso/lib/constants/app';
+import { IS_DOCUMENSO_CLOUD } from '@documenso/lib/constants/app';
+import { canConfigureBranding, canUseAdvancedBranding } from '@documenso/lib/utils/branding-entitlement';
 import { canExecuteOrganisationAction } from '@documenso/lib/utils/organisations';
 import type { SanitizeBrandingCssWarning } from '@documenso/lib/utils/sanitize-branding-css';
 import { trpc } from '@documenso/trpc/react';
@@ -40,10 +41,9 @@ export default function TeamsSettingsPage() {
   const { mutateAsync: updateTeamSettings } = trpc.team.settings.update.useMutation();
   const { mutateAsync: updateTeamBrandingLogo } = trpc.team.settings.updateBrandingLogo.useMutation();
 
-  const canConfigureBranding = organisation.organisationClaim.flags.allowCustomBranding || !IS_BILLING_ENABLED();
+  const hasBrandingAccess = canConfigureBranding(organisation.organisationClaim.flags);
 
-  const canCustomBranding =
-    organisation.organisationClaim.flags.embedSigningWhiteLabel === true || !IS_BILLING_ENABLED();
+  const canCustomBranding = canUseAdvancedBranding(organisation.organisationClaim.flags);
 
   const onBrandingPreferencesFormSubmit = async (data: TBrandingPreferencesFormSchema) => {
     try {
@@ -122,7 +122,7 @@ export default function TeamsSettingsPage() {
         subtitle={t`Here you can set preferences and defaults for branding.`}
       />
 
-      {canConfigureBranding ? (
+      {hasBrandingAccess ? (
         <section>
           <BrandingPreferencesForm
             canInherit={true}
