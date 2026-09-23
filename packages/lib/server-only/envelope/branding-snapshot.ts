@@ -200,48 +200,135 @@ export const resolveEnvelopeBranding = ({
 };
 
 /**
- * Resolve the branding a signing page must render, including the URL for the
+ * The bytes of a pinned branding logo, shaped for the message that has to carry
+ * them: an inline MIME part the rendered logo references as `cid:<contentId>`.
+ */
+export type TBrandingLogoAttachment = {
+  /**
+   * The MIME content id the message references the part by. Derived from the
+   * bytes, so the same logo always resolves to the same id and two messages can
+   * never disagree about what an id holds.
+   */
+  contentId: string;
+  contentType: string;
+  /**
+   * The logo's bytes, base64-encoded. Base64 is what the MIME part carries
+   * anyway, and keeping it textual means the attachment survives being passed
+   * through a serializable payload.
+   */
+  contentBase64: string;
+  /** The name the part reports: some clients only render named inline images. */
+  filename: string;
+};
+
+/** The form the caller's medium can carry the pinned bytes in. */
+export type TBrandingLogoReference =
+  /** A `data:` URL, rendered inside the document (the web signing pages). */
+  | 'data-url'
+  /**
+   * A `cid:` reference, carried by the caller as an inline MIME part (emails).
+   * The bytes travel inside the message, so a recipient opening it months later
+   * still sees the pinned logo, and mail clients render `cid:` reliably (unlike
+   * the `data:` URLs Gmail refuses to render in a body).
+   */
+  | 'content-id';
+
+export type TResolvedSigningBranding = {
+  brandingEnabled: boolean;
+  /** The pinned logo reference (what the snapshot stores), or the live one when there is no snapshot. */
+  brandingLogo: string;
+  /** Where the surface renders the logo from. Null when the pinned bytes could not be read. */
+  brandingLogoUrl: string | null;
+  /** The bytes the `cid:` reference points at; set for `content-id` references only. */
+  brandingLogoAttachment: TBrandingLogoAttachment | null;
+};
+
+/**
+ * Resolve the branding a surface must render, including the reference for the
  * custom branding logo.
  *
- * `/api/branding/logo/team/:teamId` resolves the branding live, so it only
- * serves the pinned bytes while the live logo still matches the pinned one.
- * Once the branding drifts (or is disabled) the pinned bytes are inlined
- * instead, so the signer keeps seeing the version the envelope is pinned to
- * rather than a version that was never part of this envelope.
+ * A pinned envelope is never rendered from the live endpoint
+ * (`/api/branding/logo/team/:teamId`): that endpoint resolves the live
+ * configuration, so an artifact opened after the branding changed would show a
+ * logo the envelope never used — or a broken image when the branding was
+ * disabled. The pinned bytes are inlined instead, in the form the caller's
+ * medium can carry (see `TBrandingLogoReference`), which is what makes the
+ * reference immutable.
+ *
+ * Live branding — an envelope without a snapshot, and every non-envelope email —
+ * keeps using the live endpoint: there is no pinned version to protect.
  */
 export const resolveSigningBranding = async ({
   teamId,
   brandingSnapshot,
   liveBranding,
+  logoReference = 'data-url',
 }: {
   teamId: number;
   brandingSnapshot: unknown;
   liveBranding: TDerivedBrandingSettings;
-}): Promise<{ brandingEnabled: boolean; brandingLogo: string; brandingLogoUrl: string | null }> => {
-  const { branding } = resolveEnvelopeBranding({ brandingSnapshot, liveBranding });
+  logoReference?: TBrandingLogoReference;
+}): Promise<TResolvedSigningBranding> => {
+  const { branding, isPinned } = resolveEnvelopeBranding({ brandingSnapshot, liveBranding });
 
   if (!branding.enabled || branding.logo.length === 0) {
-    return { brandingEnabled: false, brandingLogo: '', brandingLogoUrl: null };
+    return { brandingEnabled: false, brandingLogo: '', brandingLogoUrl: null, brandingLogoAttachment: null };
   }
 
-  const isServedLogoStillPinned = liveBranding.brandingEnabled === true && liveBranding.brandingLogo === branding.logo;
+  if (!isPinned) {
+    return {
+      brandingEnabled: true,
+      brandingLogo: branding.logo,
+      brandingLogoUrl: `/api/branding/logo/team/${teamId}`,
+      brandingLogoAttachment: null,
+    };
+  }
 
-  return {
-    brandingEnabled: true,
-    brandingLogo: branding.logo,
-    brandingLogoUrl: isServedLogoStillPinned
-      ? `/api/branding/logo/team/${teamId}`
-      : await loadBrandingLogoAsDataUrl(branding.logo),
-  };
+  const pinnedLogo = await loadPinnedBrandingLogo(branding.logo);
+
+  // The pinned bytes are gone: rendering the live logo instead would show a
+  // version that was never part of this envelope, so the branding renders
+  // without a custom logo.
+  if (!pinnedLogo) {
+    return { brandingEnabled: true, brandingLogo: branding.logo, brandingLogoUrl: null, brandingLogoAttachment: null };
+  }
+
+  const { dataUrl, ...attachment } = pinnedLogo;
+
+  if (logoReference === 'content-id') {
+    return {
+      brandingEnabled: true,
+      brandingLogo: branding.logo,
+      brandingLogoUrl: `cid:${attachment.contentId}`,
+      brandingLogoAttachment: attachment,
+    };
+  }
+
+  return { brandingEnabled: true, brandingLogo: branding.logo, brandingLogoUrl: dataUrl, brandingLogoAttachment: null };
 };
 
-const loadBrandingLogoAsDataUrl = async (logo: string): Promise<string | null> => {
+/**
+ * Load the bytes a pinned logo reference points at, in both forms the readers
+ * need: the `data:` URL a document renders, and the inline MIME part an email
+ * carries. Returns null when the bytes cannot be read.
+ */
+const loadPinnedBrandingLogo = async (
+  logo: string,
+): Promise<(TBrandingLogoAttachment & { dataUrl: string }) | null> => {
   try {
     const file = await getFileServerSide(JSON.parse(logo));
 
     const { content, contentType } = await loadLogo(file);
+    const bytes = Buffer.from(content);
+    const contentBase64 = bytes.toString('base64');
 
-    return `data:${contentType};base64,${Buffer.from(content).toString('base64')}`;
+    return {
+      contentId: `branding-logo-${Buffer.from(sha256(bytes)).toString('hex').slice(0, 16)}`,
+      contentType,
+      contentBase64,
+      filename: 'branding-logo.png',
+      dataUrl: `data:${contentType};base64,${contentBase64}`,
+    };
   } catch (error) {
     console.error('Failed to load the pinned branding logo', error);
 

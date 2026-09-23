@@ -12,7 +12,7 @@ import { EmailDomainStatus, type OrganisationClaim, type OrganisationGlobalSetti
 import type { Transporter } from 'nodemailer';
 import { match, P } from 'ts-pattern';
 
-import { IS_BILLING_ENABLED, NEXT_PUBLIC_WEBAPP_URL } from '../../constants/app';
+import { IS_BILLING_ENABLED } from '../../constants/app';
 import { DOCUMENSO_INTERNAL_EMAIL } from '../../constants/email';
 import { AppError, AppErrorCode } from '../../errors/app-error';
 import { logger } from '../../utils/logger';
@@ -26,8 +26,10 @@ import { extractDerivedTeamSettings } from '../../utils/teams';
 import {
   resolveEnvelopeBranding,
   resolveSigningBranding,
+  type TBrandingLogoAttachment,
   type TDerivedBrandingSettings,
 } from '../envelope/branding-snapshot';
+import { withBrandingLogoAttachment } from './branding-logo-attachment';
 import { resolveEmailTransport } from './resolve-email-transport';
 
 type EmailMetaOption = Partial<Pick<DocumentMeta, 'emailId' | 'emailReplyTo' | 'language'>>;
@@ -89,6 +91,15 @@ export type EmailContextResponse = {
   settings: Omit<OrganisationGlobalSettings, 'id'>;
   claims: OrganisationClaim;
   /**
+   * The bytes of the pinned branding logo `branding` references as `cid:`, or
+   * null when the branding is live (or has no logo).
+   *
+   * `emailTransport` already carries them, so only a sender that bypasses the
+   * context transport — the Documenso-internal mailer, used for owner
+   * notifications — has to attach this itself.
+   */
+  brandingLogoAttachment: TBrandingLogoAttachment | null;
+  /**
    * Whether the organisation is prevented from sending emails.
    *
    * When true, ALL emails sent on behalf of this organisation must be skipped.
@@ -145,11 +156,16 @@ export const getEmailContext = async (options: GetEmailContextOptions): Promise<
         transport: mailer,
       };
 
+  // The pinned logo of an envelope is carried by the very transport the caller
+  // sends through, so whichever transport this context resolves to is the one
+  // that has to be able to carry it (see `carryBrandingLogoAttachment`).
+  const brandingLogoAttachment = emailContext.brandingLogoAttachment;
+
   // Immediate return for internal emails.
   if (options.emailType === 'INTERNAL') {
     return {
       ...emailContext,
-      emailTransport: resolvedTransportData.transport,
+      emailTransport: carryBrandingLogoAttachment(resolvedTransportData.transport, brandingLogoAttachment),
       senderEmail: {
         name: resolvedTransportData.name,
         address: resolvedTransportData.address,
@@ -179,7 +195,7 @@ export const getEmailContext = async (options: GetEmailContextOptions): Promise<
   if (foundSenderEmail) {
     return {
       ...emailContext,
-      emailTransport: mailer,
+      emailTransport: carryBrandingLogoAttachment(mailer, brandingLogoAttachment),
       senderEmail: {
         name: foundSenderEmail.emailName,
         address: foundSenderEmail.email,
@@ -192,7 +208,7 @@ export const getEmailContext = async (options: GetEmailContextOptions): Promise<
   // No custom-domain sender → per-plan transport (if any) supplies transport + from-address.
   return {
     ...emailContext,
-    emailTransport: resolvedTransportData.transport,
+    emailTransport: carryBrandingLogoAttachment(resolvedTransportData.transport, brandingLogoAttachment),
     senderEmail: {
       name: resolvedTransportData.name,
       address: resolvedTransportData.address,
@@ -249,6 +265,7 @@ const handleOrganisationEmailContext = async (organisationId: string) => {
   return {
     allowedEmails,
     branding,
+    brandingLogoAttachment: null,
     settings: organisation.organisationGlobalSettings,
     claims,
     emailsDisabled: organisation.owner.disabled || claims.flags.disableEmails === true,
@@ -298,7 +315,7 @@ const handleTeamEmailContext = async (teamId: number, brandingSnapshot?: unknown
 
   const teamSettings = extractDerivedTeamSettings(organisation.organisationGlobalSettings, team.teamGlobalSettings);
 
-  const branding = await resolveTeamEmailBranding({
+  const emailBranding = await resolveTeamEmailBranding({
     teamId,
     settings: teamSettings,
     hidePoweredBy: claims.flags.hidePoweredBy ?? false,
@@ -308,12 +325,12 @@ const handleTeamEmailContext = async (teamId: number, brandingSnapshot?: unknown
   const allowBrandedEmailColors = !IS_BILLING_ENABLED() || claims.flags.embedSigningWhiteLabel === true;
 
   if (!allowBrandedEmailColors) {
-    branding.brandingColors = undefined;
+    emailBranding.branding.brandingColors = undefined;
   }
 
   return {
     allowedEmails,
-    branding,
+    ...emailBranding,
     settings: teamSettings,
     claims,
     emailsDisabled: organisation.owner.disabled || claims.flags.disableEmails === true,
@@ -323,8 +340,9 @@ const handleTeamEmailContext = async (teamId: number, brandingSnapshot?: unknown
 };
 
 /**
- * Build the branding a team-sourced email renders: the branding the envelope is
- * pinned to when it has a snapshot, the live team settings otherwise.
+ * Build the branding a team-sourced email renders — the branding the envelope is
+ * pinned to when it has a snapshot, the live team settings otherwise — together
+ * with the bytes of the pinned logo, which the message has to carry itself.
  */
 const resolveTeamEmailBranding = async ({
   teamId,
@@ -340,10 +358,16 @@ const resolveTeamEmailBranding = async ({
   const pinnedBranding = await resolvePinnedEmailBranding({ teamId, brandingSnapshot, liveBranding: settings });
 
   if (!pinnedBranding) {
-    return teamGlobalSettingsToBranding(settings, teamId, hidePoweredBy);
+    return {
+      branding: teamGlobalSettingsToBranding(settings, teamId, hidePoweredBy),
+      brandingLogoAttachment: null,
+    };
   }
 
-  return teamGlobalSettingsToPinnedEmailBranding(settings, hidePoweredBy, pinnedBranding);
+  return {
+    branding: teamGlobalSettingsToPinnedEmailBranding(settings, hidePoweredBy, pinnedBranding.branding),
+    brandingLogoAttachment: pinnedBranding.attachment,
+  };
 };
 
 /**
@@ -351,10 +375,13 @@ const resolveTeamEmailBranding = async ({
  * null when the envelope has no readable snapshot and the caller must keep
  * resolving branding live.
  *
- * `resolveSigningBranding` owns the rule for which logo URL still serves the
- * pinned bytes, so it is reused here rather than duplicated: the emails and the
- * signing pages of one envelope must never disagree about the logo it shows. It
- * returns an app-relative path while emails need an absolute URL.
+ * `resolveSigningBranding` owns the reference a pinned logo must be rendered
+ * from, so it is reused here rather than duplicated: the emails and the signing
+ * pages of one envelope must never disagree about the logo it shows. Emails ask
+ * for the `content-id` reference and carry the bytes in the message, because
+ * the live logo endpoint resolves the branding of the moment — a recipient
+ * opening an email sent months ago must not be handed a logo the envelope never
+ * used, nor a broken image when the branding was disabled since.
  */
 const resolvePinnedEmailBranding = async ({
   teamId,
@@ -364,31 +391,39 @@ const resolvePinnedEmailBranding = async ({
   teamId: number;
   brandingSnapshot: unknown;
   liveBranding: TDerivedBrandingSettings;
-}): Promise<PinnedEmailBranding | null> => {
+}): Promise<{ branding: PinnedEmailBranding; attachment: TBrandingLogoAttachment | null } | null> => {
   const { branding, isPinned } = resolveEnvelopeBranding({ brandingSnapshot, liveBranding });
 
   if (!isPinned) {
     return null;
   }
 
-  const { brandingLogoUrl } = await resolveSigningBranding({ teamId, brandingSnapshot, liveBranding });
+  const { brandingLogoUrl, brandingLogoAttachment } = await resolveSigningBranding({
+    teamId,
+    brandingSnapshot,
+    liveBranding,
+    logoReference: 'content-id',
+  });
 
   return {
-    enabled: branding.enabled,
-    logoUrl: brandingLogoUrl === null ? '' : toAbsoluteUrl(brandingLogoUrl),
-    url: branding.url,
-    companyDetails: branding.companyDetails,
-    colors: branding.colors,
+    branding: {
+      enabled: branding.enabled,
+      logoUrl: brandingLogoUrl ?? '',
+      url: branding.url,
+      companyDetails: branding.companyDetails,
+      colors: branding.colors,
+    },
+    attachment: brandingLogoAttachment,
   };
 };
 
-const toAbsoluteUrl = (value: string) => {
-  if (value.startsWith('/')) {
-    return `${NEXT_PUBLIC_WEBAPP_URL()}${value}`;
-  }
-
-  return value;
-};
+/**
+ * Hand the caller a transport that carries the pinned logo's bytes, when there
+ * are any. Senders that bypass the context transport (the Documenso-internal
+ * mailer, used for owner notifications) must attach these themselves.
+ */
+const carryBrandingLogoAttachment = (transporter: Transporter, attachment: TBrandingLogoAttachment | null) =>
+  attachment ? withBrandingLogoAttachment(transporter, attachment) : transporter;
 
 const getAllowedEmails = (
   organisation: Organisation & {

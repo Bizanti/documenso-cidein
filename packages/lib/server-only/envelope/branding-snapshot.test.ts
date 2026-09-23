@@ -232,24 +232,35 @@ describe('resolveEnvelopeBranding', () => {
 });
 
 describe('resolveSigningBranding', () => {
-  it('serves the live endpoint while the live logo still matches the pinned one', async () => {
+  const mockPinnedLogoBytes = () => {
+    vi.mocked(getFileServerSide).mockResolvedValue(Buffer.from([1, 2, 3]) as never);
+    vi.mocked(loadLogo).mockResolvedValue({ contentType: 'image/png', content: Buffer.from([1, 2, 3]) } as never);
+  };
+
+  // The web surfaces render the pinned bytes inline: the live endpoint resolves
+  // the branding of the moment, so it may never be the reference a pinned
+  // envelope is rendered from.
+  it('inlines the pinned bytes while the live logo still matches them', async () => {
+    mockPinnedLogoBytes();
+
     const result = await resolveSigningBranding({
       teamId: 7,
       brandingSnapshot: buildPinnedSnapshot(),
       liveBranding: { ...PINNED_BRANDING, brandingEnabled: true },
     });
 
+    expect(getFileServerSide).toHaveBeenCalledWith({ type: 'BYTES_64', data: 'AQID' });
     expect(result).toEqual({
       brandingEnabled: true,
       brandingLogo: PINNED_LOGO,
-      brandingLogoUrl: '/api/branding/logo/team/7',
+      brandingLogoUrl: 'data:image/png;base64,AQID',
+      brandingLogoAttachment: null,
     });
-    expect(getFileServerSide).not.toHaveBeenCalled();
+    expect(result.brandingLogoUrl).not.toContain('/api/branding/logo/team/');
   });
 
   it('inlines the pinned bytes once the live branding drifted', async () => {
-    vi.mocked(getFileServerSide).mockResolvedValue(Buffer.from([1, 2, 3]) as never);
-    vi.mocked(loadLogo).mockResolvedValue({ contentType: 'image/png', content: Buffer.from([1, 2, 3]) } as never);
+    mockPinnedLogoBytes();
 
     const result = await resolveSigningBranding({
       teamId: 7,
@@ -262,6 +273,70 @@ describe('resolveSigningBranding', () => {
       brandingEnabled: true,
       brandingLogo: PINNED_LOGO,
       brandingLogoUrl: 'data:image/png;base64,AQID',
+      brandingLogoAttachment: null,
+    });
+  });
+
+  it('hands the pinned bytes to the caller that carries them in the message', async () => {
+    mockPinnedLogoBytes();
+
+    const result = await resolveSigningBranding({
+      teamId: 7,
+      brandingSnapshot: buildPinnedSnapshot(),
+      liveBranding: { ...PINNED_BRANDING, brandingEnabled: true },
+      logoReference: 'content-id',
+    });
+
+    expect(result).toEqual({
+      brandingEnabled: true,
+      brandingLogo: PINNED_LOGO,
+      brandingLogoUrl: 'cid:branding-logo-039058c6f2c0cb49',
+      brandingLogoAttachment: {
+        contentId: 'branding-logo-039058c6f2c0cb49',
+        contentType: 'image/png',
+        contentBase64: 'AQID',
+        filename: 'branding-logo.png',
+      },
+    });
+  });
+
+  it('derives the content id from the bytes, so two logos never share one', async () => {
+    vi.mocked(getFileServerSide).mockResolvedValue(Buffer.from([1, 2, 3]) as never);
+    vi.mocked(loadLogo).mockResolvedValue({ contentType: 'image/png', content: Buffer.from([1, 2, 3]) } as never);
+
+    const first = await resolveSigningBranding({
+      teamId: 7,
+      brandingSnapshot: buildPinnedSnapshot(),
+      liveBranding: PINNED_BRANDING,
+      logoReference: 'content-id',
+    });
+
+    vi.mocked(loadLogo).mockResolvedValue({ contentType: 'image/png', content: Buffer.from([9, 9]) } as never);
+
+    const second = await resolveSigningBranding({
+      teamId: 7,
+      brandingSnapshot: buildPinnedSnapshot(),
+      liveBranding: PINNED_BRANDING,
+      logoReference: 'content-id',
+    });
+
+    expect(first.brandingLogoAttachment?.contentId).not.toBe(second.brandingLogoAttachment?.contentId);
+  });
+
+  it('renders no custom logo when the pinned bytes cannot be read', async () => {
+    vi.mocked(getFileServerSide).mockRejectedValue(new Error('gone'));
+
+    const result = await resolveSigningBranding({
+      teamId: 7,
+      brandingSnapshot: buildPinnedSnapshot(),
+      liveBranding: PINNED_BRANDING,
+    });
+
+    expect(result).toEqual({
+      brandingEnabled: true,
+      brandingLogo: PINNED_LOGO,
+      brandingLogoUrl: null,
+      brandingLogoAttachment: null,
     });
   });
 
@@ -272,7 +347,12 @@ describe('resolveSigningBranding', () => {
       liveBranding: { ...LIVE_BRANDING, brandingEnabled: true, brandingLogo: 'live-logo' },
     });
 
-    expect(result).toEqual({ brandingEnabled: false, brandingLogo: '', brandingLogoUrl: null });
+    expect(result).toEqual({
+      brandingEnabled: false,
+      brandingLogo: '',
+      brandingLogoUrl: null,
+      brandingLogoAttachment: null,
+    });
     expect(getFileServerSide).not.toHaveBeenCalled();
   });
 
@@ -287,6 +367,8 @@ describe('resolveSigningBranding', () => {
       brandingEnabled: true,
       brandingLogo: 'live-logo',
       brandingLogoUrl: '/api/branding/logo/team/7',
+      brandingLogoAttachment: null,
     });
+    expect(getFileServerSide).not.toHaveBeenCalled();
   });
 });
