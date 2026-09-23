@@ -31,16 +31,26 @@ const LIVE_BRAND_COLOUR = { r: 0, g: 200, b: 255 };
 const BRAND_LOGO_WIDTH = 160;
 const BRAND_LOGO_HEIGHT = 40;
 
+/** A logo within the upload limits that is nevertheless extremely wide. */
+const EXTREME_BRAND_LOGO_SIZE = { width: 1024, height: 16 };
+
+/** The side margin the certificate renderer keeps on every page, in PDF units. */
+const CERTIFICATE_MINIMUM_MARGIN = 10;
+
 const BRANDING_LABEL = 'Signing certificate provided by';
 const DOCUMENT_PAGE_SNIPPET = 'OPEN SOURCE PRINCIPLES WAIVER';
 
 type Rgb = { r: number; g: number; b: number };
+type LogoSize = { width: number; height: number };
 
-const createBrandLogo = async (colour: Rgb) => {
-  const canvas = createCanvas(BRAND_LOGO_WIDTH, BRAND_LOGO_HEIGHT);
+const createBrandLogo = async (
+  colour: Rgb,
+  size: LogoSize = { width: BRAND_LOGO_WIDTH, height: BRAND_LOGO_HEIGHT },
+) => {
+  const canvas = createCanvas(size.width, size.height);
   const context = canvas.getContext('2d');
   context.fillStyle = `rgb(${colour.r}, ${colour.g}, ${colour.b})`;
-  context.fillRect(0, 0, BRAND_LOGO_WIDTH, BRAND_LOGO_HEIGHT);
+  context.fillRect(0, 0, size.width, size.height);
 
   return Buffer.from(await canvas.encode('png'));
 };
@@ -163,6 +173,40 @@ const countColour = (image: Buffer, colour: Rgb, tolerance = 32) => {
   }
 
   return count;
+};
+
+/**
+ * The bounding box of everything painted in `colour`, in rendered pixels. Used
+ * to check that the brand mark stays inside the page it is drawn on.
+ */
+const measureColourBounds = (image: Buffer, colour: Rgb, tolerance = 32) => {
+  const { data, width, height } = PNG.sync.read(image);
+
+  let count = 0;
+  let minX = width;
+  let maxX = -1;
+  let minY = height;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+
+      if (
+        Math.abs(data[offset] - colour.r) <= tolerance &&
+        Math.abs(data[offset + 1] - colour.g) <= tolerance &&
+        Math.abs(data[offset + 2] - colour.b) <= tolerance
+      ) {
+        count++;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+
+  return { count, minX, maxX, minY, maxY, width, height };
 };
 
 /** Number of pixels two renders of the same page disagree on. */
@@ -549,4 +593,58 @@ test('[CERTIFICATE_BRANDING]: the certificate page falls back to the Documenso m
   await expect(page.locator('svg:not([data-testid="certificate-brand-logo"])')).toHaveCount(0);
   await expect(page.locator('a[href*="/share/"]')).toHaveCount(0);
   expect(await page.content()).not.toContain('qr_e8d_certificate_page_fallback_test');
+});
+
+/**
+ * The QA finding: a 1024x16 logo passes the upload limits, but at the
+ * certificate's 12 unit height it needs 768 units — wider than the whole A4
+ * content column. The mark used to be drawn past the left edge of the page and
+ * clipped there, so the rendered certificate must keep it inside the margins.
+ */
+test('[CERTIFICATE_BRANDING]: an extremely wide brand logo still fits the certificate page', async ({ page }) => {
+  const { user, team, organisation } = await seedUser();
+
+  await publishOrganisationBranding({
+    organisationGlobalSettingsId: organisation.organisationGlobalSettingsId,
+    brandingLogo: toBrandLogoReference(await createBrandLogo(PINNED_BRAND_COLOUR, EXTREME_BRAND_LOGO_SIZE)),
+  });
+
+  await enableSigningCertificate(team.id);
+
+  const { document, recipients } = await seedPendingDocumentWithFullFields({
+    owner: user,
+    teamId: team.id,
+    recipients: ['extreme-logo-certificate-signer@test.documenso.com'],
+    fields: [FieldType.SIGNATURE],
+  });
+
+  const recipient = recipients[0];
+
+  await signDocumentAndWaitForSeal({ page, recipient, envelopeId: document.id });
+
+  const sealedPdf = await fetchEnvelopeItemPdf({ envelopeId: document.id, token: recipient.token, version: 'signed' });
+  const sealedPages = await readPdfPageTexts(sealedPdf);
+  const renderedPages = await renderPdfPages(sealedPdf);
+  const certificatePage = renderedPages[renderedPages.length - 1];
+
+  expect(sealedPages[sealedPages.length - 1]).toContain(BRANDING_LABEL);
+
+  const mark = measureColourBounds(certificatePage, PINNED_BRAND_COLOUR);
+  const minimumMarginInPixels = CERTIFICATE_MINIMUM_MARGIN * PDF_RENDER_SCALE;
+
+  // The mark is rendered at all, and a couple of page pixels of slack absorb the
+  // anti-aliasing of the logo's edges and the page size rounding.
+  expect(mark.count).toBeGreaterThan(500);
+  expect(mark.minX).toBeGreaterThanOrEqual(minimumMarginInPixels);
+  expect(mark.maxX).toBeLessThanOrEqual(mark.width - minimumMarginInPixels + 2);
+
+  // The mark is on the certificate page, not on the document pages below it.
+  expect(mark.maxY).toBeLessThan(mark.height);
+
+  // The logo keeps its proportions: 1024x16 is about 64 times wider than tall,
+  // so a stretched or cropped mark would not land in this range.
+  const renderedAspectRatio = (mark.maxX - mark.minX + 1) / (mark.maxY - mark.minY + 1);
+
+  expect(renderedAspectRatio).toBeGreaterThan(50);
+  expect(renderedAspectRatio).toBeLessThan(80);
 });

@@ -18,7 +18,7 @@ import type { TDocumentAuditLogBaseSchema } from '../../types/document-audit-log
 import { readFallbackBrandLogo, renderBrandLogoImage } from './brand-logo';
 import type { TDocumentBranding } from './document-branding';
 import { shouldRenderBrandMark } from './document-branding';
-import { ensureFontLibrary } from './helpers';
+import { ensureFontLibrary, rightAlignWithinContent } from './helpers';
 
 type ColumnWidths = [number, number, number];
 
@@ -567,15 +567,26 @@ const renderRow = (options: RenderRowOptions) => {
   return rowGroup;
 };
 
+type RenderCertificateBrandMarkOptions = {
+  brandingLogo: Buffer | null;
+  i18n: I18n;
+
+  /** Width of the content column the whole mark — label included — must fit in. */
+  contentWidth: number;
+};
+
 /**
  * The brand mark of the certificate: the pinned brand logo of the envelope, or
  * the Documenso mark when the envelope is not branded.
+ *
+ * The logo is capped to the width left next to the label, so a logo too wide
+ * for the column shrinks instead of running past the page edge.
  *
  * There is deliberately no QR code: the plan forbids adding machine-readable
  * codes to the document, and the certificate is covered by the X.509 signature
  * rather than by a link back to the platform.
  */
-const renderBranding = ({ brandingLogo, i18n }: { brandingLogo: Buffer | null; i18n: I18n }) => {
+export const renderCertificateBrandMark = ({ brandingLogo, i18n, contentWidth }: RenderCertificateBrandMarkOptions) => {
   const branding = new Konva.Group();
 
   const brandingHeight = 12;
@@ -593,12 +604,15 @@ const renderBranding = ({ brandingLogo, i18n }: { brandingLogo: Buffer | null; i
   branding.add(text);
 
   const logoX = text.width() + 16;
+  const logoMaxWidth = Math.max(contentWidth - logoX, 0);
 
   const logoImage =
-    (brandingLogo ? renderBrandLogoImage({ logo: brandingLogo, height: brandingHeight, x: logoX }) : null) ??
+    (brandingLogo
+      ? renderBrandLogoImage({ logo: brandingLogo, height: brandingHeight, maxWidth: logoMaxWidth, x: logoX })
+      : null) ??
     // A brand logo which cannot be decoded must never break the seal, so the
     // certificate falls back to the Documenso mark.
-    renderBrandLogoImage({ logo: readFallbackBrandLogo(), height: brandingHeight, x: logoX });
+    renderBrandLogoImage({ logo: readFallbackBrandLogo(), height: brandingHeight, maxWidth: logoMaxWidth, x: logoX });
 
   if (logoImage) {
     branding.add(logoImage);
@@ -736,9 +750,10 @@ export async function renderCertificate({
 
   // The brand mark is the pinned brand logo of the envelope, and it is only
   // omitted when the organisation hides the Documenso mark on an unbranded
-  // document.
+  // document. It is built for the width of the content column, so the logo can
+  // never outgrow the page it is drawn on.
   const brandingGroup = shouldRenderBrandMark(branding)
-    ? renderBranding({ brandingLogo: branding.logo?.content ?? null, i18n })
+    ? renderCertificateBrandMark({ brandingLogo: branding.logo?.content ?? null, i18n, contentWidth: tableWidth })
     : null;
   const brandingRect = brandingGroup?.getClientRect() ?? null;
   const brandingTopPadding = 24;
@@ -779,7 +794,7 @@ export async function renderCertificate({
 
       if (brandingRect.height + brandingTopPadding <= remainingHeight) {
         brandingGroup.setAttrs({
-          x: pageWidth - brandingRect.width - margin,
+          x: rightAlignWithinContent({ elementWidth: brandingRect.width, pageWidth, margin }),
           y: group.getClientRect().height + brandingTopPadding,
         } satisfies Partial<Konva.GroupConfig>);
 
@@ -812,7 +827,7 @@ export async function renderCertificate({
     const page = new Konva.Layer();
 
     brandingGroup.setAttrs({
-      x: pageWidth - brandingRect.width - margin,
+      x: rightAlignWithinContent({ elementWidth: brandingRect.width, pageWidth, margin }),
       y: pageTopMargin / 2, // Less padding since there's nothing else on this page.
     } satisfies Partial<Konva.GroupConfig>);
 

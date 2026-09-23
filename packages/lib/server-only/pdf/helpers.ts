@@ -39,6 +39,24 @@ export const ensureFontLibrary = () => {
   }
 };
 
+type RightAlignWithinContentOptions = {
+  /** Width of the element being aligned. */
+  elementWidth: number;
+  pageWidth: number;
+  margin: number;
+};
+
+/**
+ * The left edge of a right-aligned element inside a page's content column.
+ *
+ * The element is pinned to the right edge of the content column, but never
+ * starts before `margin`: an element wider than the column — which is what an
+ * unbounded brand logo used to be — would otherwise be pushed off the left edge
+ * of the page and clipped by it.
+ */
+export const rightAlignWithinContent = ({ elementWidth, pageWidth, margin }: RightAlignWithinContentOptions) =>
+  Math.max(margin, pageWidth - elementWidth - margin);
+
 type RecipientPlaceholderInfo = {
   email: string;
   name: string;
