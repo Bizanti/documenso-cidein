@@ -265,11 +265,12 @@ test('[BRANDING_HARDENING]: never injects a stored custom CSS value on signing p
   const { user, team, organisation } = await seedUser();
 
   // Simulate a value written by an older version, before custom CSS was
-  // disabled. It must not be rendered anywhere on the signing surface.
+  // disabled, next to a brand colour so the page is genuinely branded.
   await prisma.organisationGlobalSettings.update({
     where: { id: organisation.organisationGlobalSettingsId },
     data: {
       brandingEnabled: true,
+      brandingColors: { primary: '#123456' },
       brandingCss: '.documenso-branded .branding-hardening-marker { display: none; }',
     },
   });
@@ -286,9 +287,19 @@ test('[BRANDING_HARDENING]: never injects a stored custom CSS value on signing p
 
   expect(response?.ok()).toBeTruthy();
 
-  const html = await page.content();
+  // Assert on the CSS the page actually applies, not on the raw HTML: the stored
+  // value still travels inside the React Router hydration payload (loader data),
+  // so `page.content()` legitimately contains the string.
+  const injectedCss = await page
+    .locator('style')
+    .evaluateAll((styleElements) => styleElements.map((style) => style.textContent ?? '').join('\n'));
 
-  expect(html).not.toContain('branding-hardening-marker');
+  // The branding style block is rendered and the colour variables applied, so
+  // the check below is meaningful rather than vacuous.
+  expect(injectedCss).toContain('.documenso-branded');
+
+  // ...and the stored custom CSS is never emitted as CSS.
+  expect(injectedCss).not.toContain('branding-hardening-marker');
 });
 
 test('[BRANDING_HARDENING]: renders the custom CSS field disabled with a notice', async ({ page }) => {
@@ -301,6 +312,12 @@ test('[BRANDING_HARDENING]: renders the custom CSS field disabled with a notice'
     email: user.email,
     redirectPath: `/o/${organisation.url}/settings/branding`,
   });
+
+  // While branding is off, the whole advanced block sits under a
+  // `bg-background/60` overlay that intercepts pointer events, so enable
+  // branding before opening the CSS accordion.
+  await page.getByTestId('enable-branding').click();
+  await page.getByRole('option', { name: 'Yes' }).click();
 
   await page.getByRole('button', { name: 'Advanced — Custom CSS' }).click();
 
