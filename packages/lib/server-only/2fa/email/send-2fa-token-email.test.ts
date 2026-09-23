@@ -114,7 +114,16 @@ beforeEach(() => {
   mocks.getI18nInstance.mockResolvedValue({
     _: (descriptor: { message?: string; id: string }) => descriptor.message ?? descriptor.id,
   });
-  mocks.renderEmailWithI18N.mockResolvedValue('<html />');
+  // Faithful enough to tell which logo reference the email rendered: the pinned
+  // one is a `cid:` the transport has to carry as an inline part.
+  mocks.renderEmailWithI18N.mockImplementation(
+    async (
+      _template: unknown,
+      options: {
+        branding?: { brandingLogo?: string };
+      },
+    ) => `<html><img src="${options.branding?.brandingLogo ?? ''}" /></html>`,
+  );
   mocks.generateTwoFactorTokenFromEmail.mockResolvedValue('123456');
   mocks.getFileServerSide.mockResolvedValue(Buffer.from([1, 2, 3]));
   mocks.loadLogo.mockResolvedValue({ contentType: 'image/png', content: Buffer.from([1, 2, 3]) });
@@ -129,12 +138,20 @@ describe('2FA email branding', () => {
     const branding = renderedBranding();
 
     expect(branding.brandingEnabled).toBe(true);
-    expect(branding.brandingLogo).toBe('data:image/png;base64,AQID');
+    expect(branding.brandingLogo).toBe('cid:branding-logo-039058c6f2c0cb49');
     expect(branding.brandingLogo).not.toContain('/api/branding/logo/team/');
     expect(branding.brandingUrl).toBe('https://pinned.example');
     expect(branding.brandingCompanyDetails).toBe('CIDEIN');
     expect(branding.brandingColors?.primary).toBe('#123456');
+
+    // The bytes travel inside the message, so opening the email later cannot
+    // show a logo the envelope never used.
     expect(mocks.mailer.sendMail).toHaveBeenCalledTimes(1);
+    expect(mocks.mailer.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [expect.objectContaining({ cid: 'branding-logo-039058c6f2c0cb49', content: 'AQID' })],
+      }),
+    );
   });
 
   it('renders the live logo for an envelope without a snapshot', async () => {
@@ -145,5 +162,6 @@ describe('2FA email branding', () => {
     expect(branding.brandingLogo).toBe(`${NEXT_PUBLIC_WEBAPP_URL()}/api/branding/logo/team/${TEAM_ID}`);
     expect(branding.brandingUrl).toBe('https://live.example');
     expect(mocks.mailer.sendMail).toHaveBeenCalledTimes(1);
+    expect(mocks.mailer.sendMail.mock.calls[0][0].attachments).toBeUndefined();
   });
 });

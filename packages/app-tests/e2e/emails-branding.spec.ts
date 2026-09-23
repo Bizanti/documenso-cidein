@@ -28,6 +28,12 @@ const CHANGED_COMPANY_DETAILS = 'Changed Co';
 const PINNED_LOGO_FILE = 'logo.png';
 const CHANGED_LOGO_FILE = 'logo_icon.png';
 
+const PINNED_LOGO_WIDTH = 2248;
+const CHANGED_LOGO_WIDTH = 320;
+
+/** The inline part the pinned logo travels in, named by the resolver. */
+const PINNED_LOGO_FILENAME = 'branding-logo.png';
+
 const readBrandingLogo = async (fileName: string) => {
   const logo = await fs.readFile(path.join(__dirname, '../../assets', fileName));
 
@@ -120,16 +126,52 @@ const getMailboxMessages = async (email: string) => {
   return (await response.json()) as { id: string }[];
 };
 
-/**
- * The HTML body of the email the recipient received.
- *
- * The signing email is sent by a background job, so the send may land slightly
- * after the distribute request resolves.
- */
-const getReceivedEmailHtml = async (email: string) => {
+type ReceivedEmail = {
+  id: string;
+  html: string;
+  /** The bytes of the inline logo part the message carries. */
+  logo: Buffer;
+};
+
+const fetchInbucketJson = async (url: string) => fetch(url).then(async (res) => await res.json());
+
+const fetchBytes = async (url: string) =>
+  Buffer.from(new Uint8Array(await fetch(url).then(async (res) => await res.arrayBuffer())));
+
+const getMessage = async (email: string, messageId: string): Promise<ReceivedEmail | null> => {
   const mailbox = email.split('@')[0];
 
+  const details = await fetchInbucketJson(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}/${messageId}`);
+
+  if (!details?.body?.html) {
+    return null;
+  }
+
+  const attachment = (details.attachments ?? []).find(
+    (part: { filename?: string }) => part.filename === PINNED_LOGO_FILENAME,
+  );
+
+  if (!attachment?.['download-link']) {
+    return null;
+  }
+
+  return {
+    id: messageId,
+    html: details.body.html as string,
+    logo: await fetchBytes(attachment['download-link'] as string),
+  };
+};
+
+/**
+ * The email the recipient received, with the logo part it carries.
+ *
+ * An envelope email is sent by a background job, so the send lands slightly
+ * after the distribute request resolves.
+ */
+const getReceivedEmail = async (email: string): Promise<ReceivedEmail> => {
+  let messageId = '';
   let html = '';
+  let logo = Buffer.alloc(0);
 
   await expect(async () => {
     const messages = await getMailboxMessages(email);
@@ -137,16 +179,42 @@ const getReceivedEmailHtml = async (email: string) => {
     expect(messages.length).toBeGreaterThan(0);
 
     // Inbucket returns the newest message first.
-    const messageDetails = await fetch(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}/${messages[0].id}`).then(
-      async (res) => await res.json(),
-    );
+    const message = await getMessage(email, messages[0].id);
 
-    expect(messageDetails.body?.html).toBeTruthy();
+    expect(message).not.toBeNull();
 
-    html = messageDetails.body.html as string;
+    messageId = message?.id ?? '';
+    html = message?.html ?? '';
+    logo = message?.logo ?? Buffer.alloc(0);
   }).toPass({ timeout: 30_000, intervals: [500, 1000, 2000] });
 
-  return html;
+  return { id: messageId, html, logo };
+};
+
+/**
+ * The width encoded in a PNG's IHDR chunk. The two branding logos differ only
+ * in size, so this tells which of them a set of bytes is.
+ */
+const pngWidth = (buffer: Buffer) => buffer.readUInt32BE(16);
+
+/** The bytes the live logo endpoint serves for a team right now. */
+const getLiveBrandingLogo = async (teamId: number) => {
+  const response = await fetch(`${NEXT_PUBLIC_WEBAPP_URL()}/api/branding/logo/team/${teamId}`);
+
+  expect(response.ok).toBe(true);
+
+  return Buffer.from(await response.arrayBuffer());
+};
+
+/**
+ * A pinned email must never reference the live logo endpoint: it resolves the
+ * branding of the moment, so a message opened later would show a logo the
+ * envelope never used — or a broken image when the branding was disabled since.
+ */
+const expectNoLiveLogoReference = (email: ReceivedEmail, teamId: number) => {
+  expect(email.html).not.toContain(`/api/branding/logo/team/${teamId}`);
+  expect(email.html).not.toContain('data:image/png;base64,');
+  expect(email.html).toContain('cid:branding-logo-');
 };
 
 test('[EMAILS BRANDING]: an envelope email keeps the branding pinned when it was created', async ({ request }) => {
@@ -170,20 +238,19 @@ test('[EMAILS BRANDING]: an envelope email keeps the branding pinned when it was
 
   await apiDistributeEnvelope(request, context.token, envelope.id);
 
-  const html = await getReceivedEmailHtml(recipientEmail);
+  const email = await getReceivedEmail(recipientEmail);
 
   // The email renders the branding the envelope was pinned to.
-  expect(html).toContain(PINNED_COMPANY_DETAILS);
-  expect(html).not.toContain(CHANGED_COMPANY_DETAILS);
+  expect(email.html).toContain(PINNED_COMPANY_DETAILS);
+  expect(email.html).not.toContain(CHANGED_COMPANY_DETAILS);
 
-  // The live logo endpoint no longer serves the pinned bytes, so the pinned
-  // logo is inlined instead of pointing at a logo that was never part of this
-  // envelope.
-  expect(html).toContain('data:image/png;base64,');
-  expect(html).not.toContain(`/api/branding/logo/team/${context.team.id}`);
+  // The pinned logo travels inside the message as an inline part, so the bytes
+  // it shows cannot change afterwards.
+  expectNoLiveLogoReference(email, context.team.id);
+  expect(pngWidth(email.logo)).toBe(PINNED_LOGO_WIDTH);
 });
 
-test('[EMAILS BRANDING]: an envelope email uses the live logo while the branding matches the pin', async ({
+test('[EMAILS BRANDING]: an envelope email carries the pinned logo while the live branding matches', async ({
   request,
 }) => {
   const context = await apiCreateTestContext('e2e-emails-branding-live');
@@ -199,11 +266,58 @@ test('[EMAILS BRANDING]: an envelope email uses the live logo while the branding
 
   await apiDistributeEnvelope(request, context.token, envelope.id);
 
-  const html = await getReceivedEmailHtml(recipientEmail);
+  const email = await getReceivedEmail(recipientEmail);
 
-  expect(html).toContain(PINNED_COMPANY_DETAILS);
+  expect(email.html).toContain(PINNED_COMPANY_DETAILS);
 
-  // Nothing drifted, so the email keeps pointing at the live endpoint rather
-  // than carrying the logo bytes around.
-  expect(html).toContain(`${NEXT_PUBLIC_WEBAPP_URL()}/api/branding/logo/team/${context.team.id}`);
+  // Nothing drifted, and the email still carries the pinned bytes rather than
+  // pointing at the live endpoint: a message that was already sent must keep
+  // showing the logo of the envelope even if the branding changes later.
+  expectNoLiveLogoReference(email, context.team.id);
+  expect(pngWidth(email.logo)).toBe(PINNED_LOGO_WIDTH);
+});
+
+test('[EMAILS BRANDING]: an email sent before a branding change still shows the pinned logo', async ({ request }) => {
+  const context = await apiCreateTestContext('e2e-emails-branding-after-change');
+  const recipientEmail = seedTestEmail();
+
+  const envelope = await seedPinnedDraftEnvelope({
+    request,
+    context,
+    brandingLogo: await readBrandingLogo(PINNED_LOGO_FILE),
+    brandingCompanyDetails: PINNED_COMPANY_DETAILS,
+    recipientEmail,
+  });
+
+  await apiDistributeEnvelope(request, context.token, envelope.id);
+
+  const sent = await getReceivedEmail(recipientEmail);
+
+  expect(pngWidth(sent.logo)).toBe(PINNED_LOGO_WIDTH);
+
+  // The branding changes after the email was sent — the case that used to leave
+  // the message pointing at the live endpoint.
+  await updateTeamBranding({
+    teamGlobalSettingsId: context.team.teamGlobalSettingsId,
+    brandingLogo: await readBrandingLogo(CHANGED_LOGO_FILE),
+    brandingCompanyDetails: CHANGED_COMPANY_DETAILS,
+  });
+
+  // The live endpoint now serves the changed logo, which is exactly what the
+  // email must not be reading from.
+  expect(pngWidth(await getLiveBrandingLogo(context.team.id))).toBe(CHANGED_LOGO_WIDTH);
+
+  // Opening the message again shows the same bytes it was sent with.
+  const reopened = await getMessage(recipientEmail, sent.id);
+
+  expect(reopened).not.toBeNull();
+
+  const stillPinned = reopened as ReceivedEmail;
+
+  expect(stillPinned.html).toBe(sent.html);
+  expect(stillPinned.logo.equals(sent.logo)).toBe(true);
+  expect(stillPinned.html).toContain(PINNED_COMPANY_DETAILS);
+  expect(stillPinned.html).not.toContain(CHANGED_COMPANY_DETAILS);
+  expectNoLiveLogoReference(stillPinned, context.team.id);
+  expect(pngWidth(stillPinned.logo)).toBe(PINNED_LOGO_WIDTH);
 });

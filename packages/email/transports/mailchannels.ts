@@ -1,6 +1,6 @@
 import { env } from '@documenso/lib/utils/env';
 import type { SentMessageInfo, Transport } from 'nodemailer';
-import type { Address } from 'nodemailer/lib/mailer';
+import type { Address, Attachment } from 'nodemailer/lib/mailer';
 import type MailMessage from 'nodemailer/lib/mailer/mail-message';
 
 import { normalizeMailHeaders } from './normalize-headers';
@@ -12,6 +12,15 @@ type NodeMailerAddress = string | Address | Array<string | Address> | undefined;
 interface MailChannelsAddress {
   email: string;
   name?: string;
+}
+
+interface MailChannelsAttachment {
+  type: string;
+  filename: string;
+  /** The file's bytes, base64-encoded. */
+  content: string;
+  /** Set to embed the file inline, referenced from the HTML as `cid:<content_id>`. */
+  content_id?: string;
 }
 
 interface MailChannelsTransportOptions {
@@ -62,6 +71,8 @@ export class MailChannelsTransport implements Transport<SentMessageInfo> {
       return callback(new Error('Missing required field "from"'), null);
     }
 
+    const attachments = this.toMailChannelsAttachments(mail.data.attachments);
+
     const requestHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -98,6 +109,7 @@ export class MailChannelsTransport implements Transport<SentMessageInfo> {
             value: mail.data.html?.toString('utf-8') ?? '',
           },
         ],
+        ...(attachments.length > 0 ? { attachments } : {}),
       }),
     })
       .then((res) => {
@@ -155,5 +167,43 @@ export class MailChannelsTransport implements Transport<SentMessageInfo> {
         name: address.name,
       },
     ];
+  }
+
+  /**
+   * Converts the message attachments to MailChannels content parts.
+   *
+   * MailChannels carries attachments as base64 `content` entries, and embeds
+   * them inline when they set a `content_id` — the only form in which a `cid:`
+   * reference in the HTML resolves. The pinned branding logo of an envelope
+   * travels that way, so dropping attachments would leave those emails with a
+   * broken logo.
+   *
+   * Entries this cannot express (a stream, a file path) are dropped: this
+   * transport has never carried those.
+   */
+  private toMailChannelsAttachments(attachments: Attachment[] | undefined): MailChannelsAttachment[] {
+    return (attachments ?? []).flatMap((attachment) => {
+      const { content } = attachment;
+
+      const contentBase64 =
+        typeof content === 'string' && attachment.encoding === 'base64'
+          ? content
+          : Buffer.isBuffer(content)
+            ? content.toString('base64')
+            : null;
+
+      if (!contentBase64) {
+        return [];
+      }
+
+      return [
+        {
+          type: attachment.contentType ?? 'application/octet-stream',
+          filename: typeof attachment.filename === 'string' ? attachment.filename : 'attachment',
+          content: contentBase64,
+          ...(attachment.cid ? { content_id: attachment.cid } : {}),
+        },
+      ];
+    });
   }
 }

@@ -11,6 +11,7 @@ import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
 import { DOCUMENSO_INTERNAL_EMAIL } from '../../../constants/email';
 import { applyEmailTemplateOverride } from '../../../server-only/email/apply-email-template-override';
+import { toMailAttachment } from '../../../server-only/email/branding-logo-attachment';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
 import { getEmailTemplateOverride } from '../../../server-only/email/get-email-template-override';
 import { extractDerivedDocumentEmailSettings } from '../../../types/document-email';
@@ -66,15 +67,16 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
     return;
   }
 
-  const { branding, emailLanguage, senderEmail, replyToEmail, emailsDisabled, emailTransport } = await getEmailContext({
-    emailType: 'RECIPIENT',
-    source: {
-      type: 'team',
-      teamId: envelope.teamId,
-      brandingSnapshot: envelope.brandingSnapshot,
-    },
-    meta: envelope.documentMeta,
-  });
+  const { branding, brandingLogoAttachment, emailLanguage, senderEmail, replyToEmail, emailsDisabled, emailTransport } =
+    await getEmailContext({
+      emailType: 'RECIPIENT',
+      source: {
+        type: 'team',
+        teamId: envelope.teamId,
+        brandingSnapshot: envelope.brandingSnapshot,
+      },
+      meta: envelope.documentMeta,
+    });
 
   const i18n = await getI18nInstance(emailLanguage);
 
@@ -171,6 +173,9 @@ export const run = async ({ payload, io }: { payload: TSendSigningRejectionEmail
       subject: appliedTemplate.subject,
       html,
       text,
+      // This email goes out through the internal mailer rather than the
+      // context transport, so the pinned logo has to be attached here.
+      attachments: brandingLogoAttachment ? [toMailAttachment(brandingLogoAttachment)] : undefined,
     });
   });
 
