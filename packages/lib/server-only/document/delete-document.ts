@@ -138,6 +138,7 @@ const handleDocumentOwnerDelete = async ({ envelope, user, requestMetadata }: Ha
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: envelope.documentMeta,
   });
@@ -202,7 +203,8 @@ const handleDocumentOwnerDelete = async ({ envelope, user, requestMetadata }: Ha
 
   // Enqueue cancellation emails as a background job. The envelope (and its
   // documentMeta) is hard-deleted above, so the job can't look it up later —
-  // pass a self-contained payload with the recipients to notify.
+  // pass a self-contained payload with the recipients to notify and the
+  // branding the envelope was pinned to.
   const recipientsToNotify = envelope.recipients
     .filter(
       (recipient) =>
@@ -230,6 +232,7 @@ const handleDocumentOwnerDelete = async ({ envelope, user, requestMetadata }: Ha
               language: emailLanguage,
             }
           : null,
+        brandingSnapshot: envelope.brandingSnapshot,
         recipients: recipientsToNotify,
       },
     });

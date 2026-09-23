@@ -133,6 +133,8 @@ export const run = async ({ payload, io }: { payload: TBulkSendTemplateJobDefini
       assetBaseUrl: NEXT_PUBLIC_WEBAPP_URL(),
     });
 
+    // This report is the team's own bulk-send summary, not an artifact of any
+    // envelope, so it keeps rendering the live branding.
     const { branding, emailLanguage, senderEmail, emailTransport } = await getEmailContext({
       emailType: 'INTERNAL',
       source: {

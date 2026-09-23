@@ -236,6 +236,7 @@ export const resendSignedDocument = async ({
       source: {
         type: 'team',
         teamId: envelope.teamId,
+        brandingSnapshot: envelope.brandingSnapshot,
       },
       meta: envelope.documentMeta,
     });

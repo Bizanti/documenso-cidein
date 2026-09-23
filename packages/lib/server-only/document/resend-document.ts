@@ -181,6 +181,7 @@ export const resendDocument = async ({ id, userId, recipients, teamId, requestMe
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: envelope.documentMeta,
   });
