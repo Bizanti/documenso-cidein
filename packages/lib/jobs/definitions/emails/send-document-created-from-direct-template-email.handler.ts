@@ -55,6 +55,7 @@ export const run = async ({ payload }: { payload: TSendDocumentCreatedFromDirect
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: envelope.documentMeta,
   });

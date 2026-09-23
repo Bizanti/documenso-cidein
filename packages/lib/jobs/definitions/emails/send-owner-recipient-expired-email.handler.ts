@@ -66,6 +66,7 @@ export const run = async ({ payload, io }: { payload: TSendOwnerRecipientExpired
     source: {
       type: 'team',
       teamId: envelope.teamId,
+      brandingSnapshot: envelope.brandingSnapshot,
     },
     meta: documentMeta,
   });

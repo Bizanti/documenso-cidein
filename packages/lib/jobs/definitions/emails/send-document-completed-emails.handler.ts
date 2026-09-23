@@ -74,6 +74,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
       source: {
         type: 'team',
         teamId: envelope.teamId,
+        brandingSnapshot: envelope.brandingSnapshot,
       },
       meta: envelope.documentMeta,
     });
