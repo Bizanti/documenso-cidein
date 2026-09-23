@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { NEXT_PUBLIC_WEBAPP_URL } from '@documenso/lib/constants/app';
 import { BRANDING_LOGO_MAX_SIZE_BYTES } from '@documenso/lib/constants/branding';
 import { prisma } from '@documenso/prisma';
@@ -15,7 +12,18 @@ import { apiSignin } from './fixtures/authentication';
 test.describe.configure({ mode: 'parallel' });
 
 const WEBAPP_BASE_URL = NEXT_PUBLIC_WEBAPP_URL();
-const LOGO_PATH = path.join(__dirname, '../../assets/logo.png');
+
+/**
+ * Uploads in this spec are generated rather than read from the shared
+ * `packages/assets/logo.png`: that asset measures 2248x320 and the branding logo
+ * route rejects any source image above 1024x1024, so it cannot serve as the
+ * positive control. The default (512x512) is the conforming fixture; the
+ * dimension test asks for sizes over the cap.
+ */
+const createBrandingLogo = (width = 512, height = 512) =>
+  sharp({ create: { width, height, channels: 3, background: { r: 10, g: 20, b: 30 } } })
+    .png()
+    .toBuffer();
 
 type MultipartFile = { name: string; mimeType: string; buffer: Buffer };
 
@@ -102,7 +110,7 @@ test('[BRANDING_HARDENING]: rejects a branding logo larger than 1MB', async ({ p
 
   // A real PNG padded past the file size limit: the size gate has to fire
   // before the payload is decoded.
-  const oversized = Buffer.concat([fs.readFileSync(LOGO_PATH), Buffer.alloc(BRANDING_LOGO_MAX_SIZE_BYTES)]);
+  const oversized = Buffer.concat([await createBrandingLogo(), Buffer.alloc(BRANDING_LOGO_MAX_SIZE_BYTES)]);
 
   const response = await postOrganisationBrandingLogo(page, organisation.id, {
     name: 'oversized.png',
@@ -133,7 +141,7 @@ test('[BRANDING_HARDENING]: rejects a PNG larger than 1024x1024 pixels', async (
   const validResponse = await postOrganisationBrandingLogo(page, organisation.id, {
     name: 'logo.png',
     mimeType: 'image/png',
-    buffer: fs.readFileSync(LOGO_PATH),
+    buffer: await createBrandingLogo(),
   });
 
   expect(validResponse.ok()).toBeTruthy();
@@ -141,11 +149,6 @@ test('[BRANDING_HARDENING]: rejects a PNG larger than 1024x1024 pixels', async (
   const afterValid = await getOrganisationSettings(organisation.organisationGlobalSettingsId);
 
   expect(afterValid.brandingLogo).toBeTruthy();
-
-  const createPng = (width: number, height: number) =>
-    sharp({ create: { width, height, channels: 3, background: { r: 10, g: 20, b: 30 } } })
-      .png()
-      .toBuffer();
 
   // One pixel over the cap on either side is rejected rather than downscaled.
   for (const [width, height] of [
@@ -155,7 +158,7 @@ test('[BRANDING_HARDENING]: rejects a PNG larger than 1024x1024 pixels', async (
     const response = await postOrganisationBrandingLogo(page, organisation.id, {
       name: 'too-large.png',
       mimeType: 'image/png',
-      buffer: await createPng(width, height),
+      buffer: await createBrandingLogo(width, height),
     });
 
     expectRejected(response);
