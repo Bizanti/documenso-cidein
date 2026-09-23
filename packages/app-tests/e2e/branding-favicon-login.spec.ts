@@ -207,6 +207,35 @@ test('[BRANDING_FAVICON]: requests without a verified branding context stay neut
   expect(invalidSize.status()).toBe(400);
 });
 
+test('[BRANDING_FAVICON]: a stored logo that cannot be decoded falls back to the neutral icon', async ({ page }) => {
+  // Branding is enabled, so the layout does advertise a tenant icon, but the
+  // stored payload is not a decodable image. The icon request must degrade to
+  // the neutral icon instead of failing.
+  const organisation = await seedBrandedOrganisation({
+    logo: JSON.stringify({ type: DocumentDataType.BYTES_64, data: Buffer.from('not an image').toString('base64') }),
+  });
+
+  const undecodable = await page
+    .context()
+    .request.get(webappUrl(`/api/branding/favicon/organisation/${organisation.id}/32`), { maxRedirects: 0 });
+
+  expect(undecodable.status()).toBe(302);
+  expect(new URL(undecodable.headers().location).pathname).toBe('/favicon-32x32.png');
+
+  // A payload that is not even valid JSON behaves the same way.
+  await prisma.organisationGlobalSettings.update({
+    where: { id: organisation.organisationGlobalSettingsId },
+    data: { brandingLogo: 'not json at all' },
+  });
+
+  const malformed = await page
+    .context()
+    .request.get(webappUrl(`/api/branding/favicon/organisation/${organisation.id}/32`), { maxRedirects: 0 });
+
+  expect(malformed.status()).toBe(302);
+  expect(new URL(malformed.headers().location).pathname).toBe('/favicon-32x32.png');
+});
+
 test('[BRANDING_FAVICON]: organisations never leak brands into each other', async ({ page }) => {
   const organisationA = await seedBrandedOrganisation({ logo: await createLogoPayload(RED) });
   const organisationB = await seedBrandedOrganisation({ logo: await createLogoPayload(BLUE) });

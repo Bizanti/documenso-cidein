@@ -50,6 +50,41 @@ const neutralFaviconResponse = (request: Request, size: FaviconSize) => {
   });
 };
 
+/**
+ * Tenant icon generated from a stored branding logo, or null when the stored
+ * payload cannot be turned into an image.
+ *
+ * Every failure inside — malformed JSON, missing file data, bytes `sharp`
+ * refuses to decode, a failed resize — has to end up as null so the caller can
+ * serve the neutral icon. A stored logo that cannot be read is no reason to
+ * answer the browser's icon request with a 500.
+ */
+const generateFavicon = async (brandingLogo: string, size: FaviconSize) => {
+  try {
+    const file = await getFileServerSide(JSON.parse(brandingLogo));
+
+    if (!file) {
+      return null;
+    }
+
+    // `loadLogo` re-encodes through sharp, which also proves the stored bytes
+    // are a real raster image before they are scaled down to icon size.
+    const { content } = await loadLogo(file);
+
+    return await sharp(content)
+      .resize(size, size, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toBuffer();
+  } catch (e) {
+    console.error(e);
+
+    return null;
+  }
+};
+
 export async function loader({ params, request }: Route.LoaderArgs) {
   const size = Number(params.size);
 
@@ -96,30 +131,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     });
   }
 
-  const file = await getFileServerSide(JSON.parse(settings.brandingLogo)).catch((e) => {
-    console.error(e);
-  });
-
-  if (!file) {
-    return neutralFaviconResponse(request, size);
-  }
-
-  // `loadLogo` re-encodes through sharp, which also proves the stored bytes are
-  // a real raster image before they are scaled down to icon size.
-  const { content } = await loadLogo(file);
-
-  const favicon = await sharp(content)
-    .resize(size, size, {
-      fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .png()
-    .toBuffer()
-    .catch((e) => {
-      console.error(e);
-
-      return null;
-    });
+  const favicon = await generateFavicon(settings.brandingLogo, size);
 
   if (!favicon) {
     return neutralFaviconResponse(request, size);
