@@ -1,9 +1,9 @@
 import { env } from '@documenso/lib/utils/env';
-import { ResendTransport } from '@documenso/nodemailer-resend';
 import type { Transporter } from 'nodemailer';
 import { createTransport } from 'nodemailer';
 
 import { MailChannelsTransport } from './transports/mailchannels';
+import { ResendTransport } from './transports/resend';
 
 /**
  * Creates a Nodemailer transport object for sending emails.

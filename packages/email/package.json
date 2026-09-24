@@ -14,10 +14,10 @@
   "scripts": {
     "dev": "react-router dev --config preview/vite.config.ts",
     "preview:build": "react-router build --config preview/vite.config.ts",
+    "test": "vitest run",
     "clean": "rimraf node_modules"
   },
   "dependencies": {
-    "@documenso/nodemailer-resend": "5.0.0",
     "@documenso/tailwind-config": "*",
     "@react-email/render": "2.1.0",
     "nodemailer": "^9.0.0",
@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@documenso/tsconfig": "*",
-    "@types/nodemailer": "^8.0.1"
+    "@types/nodemailer": "^8.0.1",
+    "vitest": "^4.0.18"
   }
 }
