@@ -1,9 +1,9 @@
 import type { TEmailTransportConfig } from '@documenso/lib/server-only/email/email-transport-config';
-import { ResendTransport } from '@documenso/nodemailer-resend';
 import type { Transporter } from 'nodemailer';
 import { createTransport } from 'nodemailer';
 
 import { MailChannelsTransport } from './mailchannels';
+import { ResendTransport } from './resend';
 
 export const buildTransport = (config: TEmailTransportConfig): Transporter => {
   switch (config.type) {

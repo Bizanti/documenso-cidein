@@ -4,8 +4,8 @@ import type Mail from 'nodemailer/lib/mailer';
  * Normalizes nodemailer mail headers into the flat `Record<string, string>`
  * shape accepted by HTTP email APIs such as Resend and MailChannels.
  *
- * Kept in sync with `toResendHeaders` in the `@documenso/nodemailer-resend`
- * package, which applies the same normalization for the Resend transport.
+ * Shared by the Resend and MailChannels transports, which both post the
+ * message as JSON.
  */
 export const normalizeMailHeaders = (headers: Mail.Options['headers']): Record<string, string> | undefined => {
   if (!headers) {
