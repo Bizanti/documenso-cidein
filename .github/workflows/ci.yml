@@ -24,8 +24,11 @@ jobs:
 
       - uses: ./.github/actions/node-install
 
-      - name: Run unit tests
+      - name: Run unit tests (lib)
         run: npm run test -w @documenso/lib
+
+      - name: Run unit tests (email transports)
+        run: npm run test -w @documenso/email
 
   build_app:
     name: Build App
