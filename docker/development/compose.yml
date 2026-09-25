@@ -35,6 +35,12 @@ services:
       - redis:/data
 
   minio:
+    # MinIO gated anonymous pulls (quay.io returns 401 for the org since
+    # 2025-09; dl.min.io binaries are 410 too). The E2E suite runs with
+    # NEXT_PUBLIC_UPLOAD_TRANSPORT=database, so CI must not pull this image.
+    # Start it explicitly when doing local S3 work:
+    #   npm run dx:up -- --profile s3
+    profiles: ['s3']
     image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z.hotfix.7aa24e772
     container_name: minio
     ports:
