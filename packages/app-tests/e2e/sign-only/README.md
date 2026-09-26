@@ -26,7 +26,7 @@ pueden cubrir hoy quedan enumerados con el motivo exacto.
 | E3  | Cuenta SIGN_ONLY con privilegios SGC (rol de equipo SGC verificado en BD) tampoco descarga: mismas rutas → 403 y política oculta | `sign-only-downloads.spec.ts`               |
 | E4  | Ver no es descargar: la cuenta restringida abre el visor del documento que firma (`…/dataId/{id}/current/item.pdf` → 200 `application/pdf`) mientras la descarga sigue en 403 | `sign-only-downloads.spec.ts`               |
 | E5  | El correo real de "documento completado" que recibe el firmante restringido llega **sin el documento**: se lee del servidor de correo de prueba (`inbucket`) que la firma hace llegar, y el mensaje identificado (asunto `Signing Complete!`, dirección de la cuenta entre sus destinatarios y entrada `EMAIL_SENT`/`DOCUMENT_COMPLETED` de esa dirección en el log de auditoría) no lleva el PDF, ni en sus partes MIME ni en su fuente SMTP | `sign-only-downloads.spec.ts`               |
-| E5b | La transición de la que nace la regla: la cuenta se crea como `[USER]`, firma el documento con el perfil completo y se restringe a `SIGN_ONLY` **después del sellado y antes de que el job de completación envíe**. El correo de completación, resuelto sobre el perfil ya restringido en el momento del envío, llega sin PDF; el buzón tiene también la invitación, así que la aserción es sobre el mensaje identificado y no sobre "cualquier mensaje sin PDF" | `sign-only-downloads.spec.ts`               |
+| E5b | La transición de la que nace la regla: la cuenta se crea como `[USER]`, firma el documento con el perfil completo y se restringe a `SIGN_ONLY` **después del sellado y antes de que el job de completación envíe**. El envío queda detenido por un advisory lock por documento (determinista, sin lock global, sin estado transitorio) mientras el test confirma la restricción; el correo de completación, resuelto sobre el perfil ya restringido en el momento del envío, llega sin PDF; el buzón tiene también la invitación, así que la aserción es sobre el mensaje identificado y no sobre "cualquier mensaje sin PDF" | `sign-only-downloads.spec.ts`               |
 | F1  | Promoción SIGN_ONLY→USER desde `/admin/users/{id}` efectiva en la siguiente petición: el token API previo deja de recibir 403 y la carpeta se crea; no se crea organización personal | `sign-only-profile-changes.spec.ts`         |
 | F2  | Degradación USER→SIGN_ONLY con sesión y token previos: la sesión se invalida (redirige a `/signin`) y el token recibe 403 en su siguiente escritura, sin crear nada | `sign-only-profile-changes.spec.ts`         |
 | F3  | USER promovido sin organización personal trabaja en el equipo asignado: inicia sesión, aterriza en `/t/{team}/documents`, el control de subida existe y su token crea una carpeta en ese equipo | `sign-only-profile-changes.spec.ts`         |
@@ -86,9 +86,10 @@ La mitad "ni adjunto" de E2 se afirma en dos niveles:
   destinatarios — y exigen la entrada de auditoría `EMAIL_SENT` / `DOCUMENT_COMPLETED` de esa misma
   dirección. "Un mensaje cualquiera sin PDF" no sería evidencia: la invitación tampoco adjunta el
   documento.
-- **Cuándo se decide**: E5b firma con una cuenta `[USER]` completa, espera a que el documento esté
-  sellado y sólo entonces la restringe, para que el envío resuelva la política sobre el perfil
-  restringido y no sobre el que tenía al completarse el documento.
+- **Cuándo se decide**: E5b firma con una cuenta `[USER]` completa y mantiene el job de envío detenido
+  con un advisory lock por documento hasta que la restricción está confirmada, así que el envío
+  resuelve la política sobre el perfil restringido y no sobre el que tenía al completarse el
+  documento. El mecanismo está en "La ventana de E5b".
 
 `inbucket` es el servidor de correo del compose de desarrollo (`docker/development/compose.yml`,
 HTTP en el puerto 9000, SMTP en el 2500), que `npm run dx:up` levanta y que
@@ -98,30 +99,63 @@ necesitan ese contenedor en marcha, como el resto de la suite de correo.
 ### La ventana de E5b (sellado → restricción → envío)
 
 El sellado (`internal.seal-document`) y el envío (`send.document.completed.emails`) son jobs: el
-segundo lo encola el primero cuando termina. En esos dos pasos, E5b restringe la cuenta con la
-siguiente secuencia, dentro de una única transacción de la base de datos:
+primero confirma el sellado y después encola el segundo. E5b necesita las dos cosas a la vez: que el
+job de envío exista **antes** de restringir la cuenta (para acreditar que se encoló con el perfil
+completo) y que el envío **no resuelva nada** hasta que la restricción esté confirmada. Eso lo da una
+pausa determinista, no una carrera ganada por tiempo:
 
-1. espera a que el job de sellado esté en `PROCESSING` (con el documento aún sin sellar);
-2. toma `LOCK TABLE "BackgroundJob" IN SHARE MODE`: mientras el lock esté tomado el sellado no puede
-   insertar la fila del job de envío, así que nada se envía;
-3. espera, ya con el lock tomado, a que la transacción del sellado confirme `COMPLETED` (el paso 2
-   no la bloquea: el sellado escribe en `Envelope`/`Recipient`/`DocumentAuditLog`, no en la tabla de
-   jobs);
-4. escribe `roles: [SIGN_ONLY]` y confirma: el lock se libera en el mismo commit que hace visible la
-   restricción, de modo que el job de envío que el sellado encola después ya no puede resolverse
-   sobre el perfil completo.
+1. **Antes de completar la firma**, el test toma un lock de *sesión* (`pg_advisory_lock`) sobre una
+   clave derivada del `envelopeId` (`hashtext(<envelopeId>)::bigint`), en un cliente Prisma propio
+   limitado a una conexión (`connection_limit=1`): un lock de sesión pertenece a la conexión que lo
+   toma y el cliente compartido está en pool, así que liberarlo desde otra conexión lo dejaría colgado
+   en el pool el resto de la corrida. El `try`/`finally` y el cierre del cliente son la red de
+   seguridad si el test falla con la pausa tomada.
+2. La firma se completa con la cuenta todavía `[USER]` y el test espera `Envelope.status ===
+   COMPLETED`.
+3. El sellado encola el job de envío (fila en `BackgroundJob`) con la cuenta aún `[USER]`: el `INSERT`
+   no está bloqueado por el lock del test. El test espera esa fila y, si no aparece, falla ahí (no
+   sigue a ciegas).
+4. El handler del job espera ese mismo lock al empezar (hook test-only, ver abajo). Mientras el test
+   lo tiene, el handler está detenido: `pg_locks` lo reporta como waiter de esa clave y el test lo
+   comprueba antes de restringir. Esa comprobación es la que acredita que la pausa está en efecto; sin
+   ella, un entorno sin la variable de la pausa podría pasar por un camino distinto al que el
+   escenario quiere probar.
+5. Con el job detenido, el test escribe `roles: [SIGN_ONLY]` vía Prisma y **relee** la cuenta para
+   confirmar la restricción, ya confirmada e invisible para el job.
+6. El test libera el lock. El handler continúa con lo que sigue del job y resuelve la política de
+   adjunto en el momento del envío, sobre el perfil ya restringido. Después el test espera la entrada
+   `EMAIL_SENT`/`DOCUMENT_COMPLETED` y lee el buzón.
 
-El test no se fía del orden de sus propios pasos: lo lee de la base de datos. Antes de tomar el lock
-comprueba que el job de envío **no** existe todavía y que el documento no está sellado (si la
-carrera se hubiera perdido, falla ahí en vez de pasar en falso); después comprueba que
-`Envelope.completedAt` es anterior a la restricción y que la entrada de auditoría del envío es
-posterior.
+El test no se fía de su propio orden: lo lee de la base de datos. Además de la pausa en sí, comprueba
+que `Envelope.completedAt` es anterior a la restricción, que las filas del job de envío son anteriores
+a la restricción (estaban encoladas con la cuenta `[USER]`) y que las entradas de auditoría del envío
+son posteriores.
 
-Margen de la carrera del paso 1: el lock tiene que entrar mientras el sellado trabaja, y el sellado
-tarda segundos (los logs de CI del run 36216086570 separan el sellado del encolado del correo entre
-1,8 s y 4,8 s). El coste del mecanismo es que, mientras el lock está tomado (~el tiempo del sellado),
-los envíos de jobs de todo el proceso esperan a que se libere; es un lock de corta duración y sólo
-bloquea escrituras en esa tabla.
+**Por qué un advisory lock**: es determinista (la pausa es un estado que se mantiene hasta que el test
+lo libera, no una ventana de tiempo que hay que ganar), es **por documento** (la clave sale del
+`envelopeId`, así que ningún otro job ni otro test queda bloqueado) y no toca el esquema. El diseño
+anterior tomaba `LOCK TABLE "BackgroundJob" IN SHARE MODE` y esperaba a ver el job de sellado en
+`PROCESSING`: bloqueaba la tabla de jobs entera -todos los envíos del proceso- y dependía de alcanzar
+un estado transitorio, además de perder la carrera contra un sellado que terminara antes de que el
+test llegara a mirar.
+
+El mecanismo son dos partes que tienen que cambiar juntas:
+
+- **App**: `packages/lib/jobs/definitions/emails/e2e-completion-email-pause.ts`, llamado al inicio de
+  `send-document-completed-emails.handler.ts`. Sólo actúa si `E2E_PAUSE_COMPLETION_EMAIL === 'true'`
+  (un test unitario fija que sin la variable no toca la base). Espera dentro de una transacción
+  interactiva con `pg_advisory_xact_lock(...)` y timeout de 120 s: Prisma fija la transacción a una
+  conexión y Postgres suelta su lock cuando la transacción termina -commit, rollback o timeout-, así
+  que no puede quedar pegado en una conexión del pool ni siquiera si el handler lanza.
+- **Test**: `e2e/sign-only/sign-only-downloads.spec.ts`, E5b y el helper `holdCompletionEmailPause`,
+  que usa la misma expresión -`hashtext(<envelopeId>)::bigint`- que el módulo de la app.
+
+**La variable se activa sólo en el arranque de la suite e2e**: los scripts `test:e2e` y
+`test:e2e:shard` de `packages/app-tests/package.json` exportan `E2E_PAUSE_COMPLETION_EMAIL=true` antes
+de `start-server-and-test`, así que la app que arrancan la tiene y ningún otro entorno (dev,
+producción) la ve. En modo dev contra un servidor ya levantado hay que dársela a la app, p. ej.
+`E2E_PAUSE_COMPLETION_EMAIL=true npm run dev` o en `.env.local`; E5b falla con un mensaje explícito si
+el job nunca se detiene.
 
 ## Cómo ejecutar
 
@@ -137,7 +171,9 @@ npm run test:e2e -- --project=ui e2e/sign-only
 # Un escenario concreto
 E2E_TEST_PATH=e2e/sign-only/sign-only-onboarding.spec.ts npm run test:e2e
 
-# En modo dev contra un servidor ya levantado
+# En modo dev contra un servidor ya levantado. E5b necesita que esa app tenga la variable de la
+# pausa (la exportan los scripts `test:e2e`, aquí hay que dársela al servidor):
+E2E_PAUSE_COMPLETION_EMAIL=true npm run dev
 npm run test:dev -w @documenso/app-tests -- --project=ui e2e/sign-only
 
 # Sólo listar (comprueba que los specs compilan y se recolectan)
@@ -173,6 +209,7 @@ NODE_OPTIONS='--import tsx' npx playwright test --list --project=ui e2e/sign-onl
   hace el producto y añade un campo de firma por firmante. El `seedPendingDocument` de
   `@documenso/prisma/seed/documents` sólo crea un campo `NAME` ya insertado: con él no hay pad de
   firma que abrir ni campo que firmar.
-- E5b restringe la cuenta con una escritura de Prisma dentro de la transacción del lock (ver arriba)
-  y no por la ruta de administración: la restricción tiene que confirmarse en el mismo commit que
-  libera el lock. La ruta `admin.user.update` está cubierta por F1/F2.
+- E5b restringe la cuenta con una escritura de Prisma entre dos verificaciones -el `Envelope` sellado y
+  la fila del job de envío- y libera la pausa después de releer la restricción; no usa la ruta de
+  administración porque el escenario es sobre el momento del envío y no sobre el cambio de perfil (esa
+  ruta está cubierta por F1/F2).
