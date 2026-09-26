@@ -24,6 +24,7 @@ import { findDocumentJobsRoute } from './find-document-jobs';
 import { findDocumentsRoute } from './find-documents';
 import { findEmailDomainsRoute } from './find-email-domains';
 import { findOrganisationStatsRoute } from './find-organisation-stats';
+import { findSignOnlyCandidatesRoute } from './find-sign-only-candidates';
 import { findSubscriptionClaimsRoute } from './find-subscription-claims';
 import { findUnsealedDocumentsRoute } from './find-unsealed-documents';
 import { findUserTeamsRoute } from './find-user-teams';
@@ -88,6 +89,7 @@ export const adminRouter = router({
     disable: disableUserRoute,
     resetTwoFactor: resetTwoFactorRoute,
     findTeams: findUserTeamsRoute,
+    findSignOnlyCandidates: findSignOnlyCandidatesRoute,
   },
   document: {
     find: findDocumentsRoute,

@@ -160,3 +160,57 @@ export const invalidateSessions = async ({
     });
   });
 };
+
+type InvalidateUserSessionsOptions = {
+  userId: number;
+  metadata: RequestMetadata;
+  isRevoke?: boolean;
+};
+
+/**
+ * Invalidate every session belonging to a user.
+ *
+ * Used when a privileged change to an account, such as an administrator
+ * changing the profile or the roles it holds, has to take effect on sessions
+ * which are already open: the account has to authenticate again so no request
+ * is resolved from a session created before the change.
+ *
+ * @returns The number of sessions which were invalidated.
+ */
+export const invalidateUserSessions = async ({
+  userId,
+  metadata,
+  isRevoke = true,
+}: InvalidateUserSessionsOptions): Promise<number> => {
+  return await prisma.$transaction(async (tx) => {
+    const sessions = await tx.session.findMany({
+      where: {
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (sessions.length === 0) {
+      return 0;
+    }
+
+    await tx.session.deleteMany({
+      where: {
+        userId,
+      },
+    });
+
+    await tx.userSecurityAuditLog.createMany({
+      data: sessions.map(() => ({
+        userId,
+        ipAddress: metadata.ipAddress,
+        userAgent: metadata.userAgent,
+        type: isRevoke ? UserSecurityAuditLogType.SESSION_REVOKED : UserSecurityAuditLogType.SIGN_OUT,
+      })),
+    });
+
+    return sessions.length;
+  });
+};
