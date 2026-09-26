@@ -16,9 +16,13 @@ import { GenericErrorLayout } from '~/components/general/generic-error-layout';
 import { OrganisationBillingBanner } from '~/components/general/organisations/organisation-billing-banner';
 import { OrganisationQuotaBanner } from '~/components/general/organisations/organisation-quota-banner';
 import { VerifyEmailBanner } from '~/components/general/verify-email-banner';
+import { signOnlyMiddleware } from '~/middleware/sign-only';
 import { TeamProvider } from '~/providers/team';
+import { getSignOnlyRedirectTarget } from '~/utils/sign-only-routes';
 
 import type { Route } from './+types/_layout';
+
+export const middleware = [signOnlyMiddleware];
 
 /**
  * Don't revalidate (run the loader on sequential navigations)
@@ -35,6 +39,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   if (!session.isAuthenticated) {
     throw redirect('/signin');
+  }
+
+  // Repeated here, like the admin layout does, so a client side navigation into a route a
+  // sign only account may not use is caught even when the middleware does not re-run.
+  const signOnlyRedirectTarget = getSignOnlyRedirectTarget(session.user, new URL(request.url).pathname);
+
+  if (signOnlyRedirectTarget) {
+    throw redirect(signOnlyRedirectTarget);
   }
 
   return {

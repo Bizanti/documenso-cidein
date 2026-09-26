@@ -1,3 +1,5 @@
+import { useSession } from '@documenso/lib/client-only/providers/session';
+import { isSignOnly } from '@documenso/lib/utils/is-sign-only';
 import { getRootHref } from '@documenso/lib/utils/params';
 import { trpc } from '@documenso/trpc/react';
 import { cn } from '@documenso/ui/lib/utils';
@@ -8,6 +10,7 @@ import { type HTMLAttributes, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { BrandingLogo } from '~/components/general/branding-logo';
+import { SIGN_ONLY_HOME } from '~/utils/sign-only-routes';
 
 import { AppCommandMenu } from './app-command-menu';
 import { AppNavDesktop } from './app-nav-desktop';
@@ -22,9 +25,14 @@ export type HeaderProps = HTMLAttributes<HTMLDivElement> & {
 export const Header = ({ className, fullWidth = false, ...props }: HeaderProps) => {
   const params = useParams();
 
+  const { user } = useSession();
+
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState(false);
   const [isHamburgerMenuOpen, setIsHamburgerMenuOpen] = useState(false);
   const [scrollY, setScrollY] = useState(0);
+
+  // A sign only account has no team area, so the inbox button leads to its own inbox.
+  const inboxHref = isSignOnly(user) ? SIGN_ONLY_HOME : '/inbox';
 
   const { data: unreadCountData } = trpc.document.inbox.getCount.useQuery(
     {
@@ -71,7 +79,7 @@ export const Header = ({ className, fullWidth = false, ...props }: HeaderProps) 
         <AppNavDesktop setIsCommandMenuOpen={setIsCommandMenuOpen} />
 
         <Button asChild variant="outline" className="relative hidden h-10 w-10 rounded-lg md:flex">
-          <Link to="/inbox" className="relative block h-10 w-10">
+          <Link to={inboxHref} className="relative block h-10 w-10">
             <InboxIcon className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors hover:text-foreground" />
 
             {unreadCountData && unreadCountData.count > 0 && (

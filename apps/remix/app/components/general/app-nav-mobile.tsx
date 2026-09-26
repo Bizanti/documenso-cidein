@@ -1,6 +1,7 @@
 import LogoImage from '@documenso/assets/logo.png';
 import { authClient } from '@documenso/auth/client';
 import { useSession } from '@documenso/lib/client-only/providers/session';
+import { isSignOnly } from '@documenso/lib/utils/is-sign-only';
 import { trpc } from '@documenso/trpc/react';
 import { Sheet, SheetContent } from '@documenso/ui/primitives/sheet';
 import { ThemeSwitcher } from '@documenso/ui/primitives/theme-switcher';
@@ -8,8 +9,8 @@ import { Trans, useLingui } from '@lingui/react/macro';
 import { ReadStatus } from '@prisma/client';
 import { useMemo } from 'react';
 import { Link } from 'react-router';
-
 import { useOptionalCurrentTeam } from '~/providers/team';
+import { SIGN_ONLY_HOME } from '~/utils/sign-only-routes';
 
 export type AppNavMobileProps = {
   isMenuOpen: boolean;
@@ -19,7 +20,7 @@ export type AppNavMobileProps = {
 export const AppNavMobile = ({ isMenuOpen, onMenuOpenChange }: AppNavMobileProps) => {
   const { t } = useLingui();
 
-  const { organisations } = useSession();
+  const { user, organisations } = useSession();
 
   const currentTeam = useOptionalCurrentTeam();
 
@@ -37,6 +38,20 @@ export const AppNavMobile = ({ isMenuOpen, onMenuOpenChange }: AppNavMobileProps
   };
 
   const menuNavigationLinks = useMemo(() => {
+    // A sign only account has no team area, so its inbox is the entire navigation.
+    if (isSignOnly(user)) {
+      return [
+        {
+          href: SIGN_ONLY_HOME,
+          text: t`My signatures`,
+        },
+        {
+          href: '/settings/profile',
+          text: t`Settings`,
+        },
+      ];
+    }
+
     let teamUrl = currentTeam?.url || null;
 
     if (!teamUrl && organisations.length === 1 && organisations[0].teams.length === 1) {
@@ -74,7 +89,7 @@ export const AppNavMobile = ({ isMenuOpen, onMenuOpenChange }: AppNavMobileProps
         text: t`Settings`,
       },
     ];
-  }, [currentTeam, organisations]);
+  }, [currentTeam, organisations, t, user]);
 
   return (
     <Sheet open={isMenuOpen} onOpenChange={onMenuOpenChange}>
@@ -92,7 +107,7 @@ export const AppNavMobile = ({ isMenuOpen, onMenuOpenChange }: AppNavMobileProps
               onClick={() => handleMenuItemClick()}
             >
               {text}
-              {href === '/inbox' && unreadCountData && unreadCountData.count > 0 && (
+              {(href === '/inbox' || href === SIGN_ONLY_HOME) && unreadCountData && unreadCountData.count > 0 && (
                 <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-primary px-1.5 font-semibold text-primary-foreground text-xs">
                   {unreadCountData.count > 99 ? '99+' : unreadCountData.count}
                 </span>

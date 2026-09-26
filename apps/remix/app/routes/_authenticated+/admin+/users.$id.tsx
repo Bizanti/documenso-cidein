@@ -24,7 +24,7 @@ import { GenericErrorLayout } from '~/components/general/generic-error-layout';
 import { AdminOrganisationsTable } from '~/components/tables/admin-organisations-table';
 import { AdminUserTeamsTable } from '~/components/tables/admin-user-teams-table';
 
-import { MultiSelectRoleCombobox } from '../../../components/general/multiselect-role-combobox';
+import { RoleProfileSelect } from '../../../components/general/role-profile-select';
 
 const ZUserFormSchema = ZUpdateUserRequestSchema.omit({ id: true });
 
@@ -159,12 +159,18 @@ const AdminUserPage = ({ user }: { user: TGetUserResponse }) => {
                 <FormItem>
                   <fieldset className="flex flex-col gap-2">
                     <FormLabel className="text-muted-foreground">
-                      <Trans>Roles</Trans>
+                      <Trans>Profile</Trans>
                     </FormLabel>
                     <FormControl>
-                      <MultiSelectRoleCombobox listValues={roles} onChange={(values: string[]) => onChange(values)} />
+                      <RoleProfileSelect roles={roles} onChange={(values: string[]) => onChange(values)} />
                     </FormControl>
                     <FormMessage />
+                    <p className="text-muted-foreground text-xs">
+                      <Trans>
+                        Sign only is a restricted profile: it may only sign the documents which have been shared with
+                        it, and cannot be combined with the User or Admin roles.
+                      </Trans>
+                    </p>
                   </fieldset>
                 </FormItem>
               )}
