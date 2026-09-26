@@ -25,7 +25,8 @@ pueden cubrir hoy quedan enumerados con el motivo exacto.
 | E2  | Firmante con cuenta SIGN_ONLY no descarga en ninguna superficie: sesión (firmado y original) → 403, token de destinatario → 403, API v1 → 403, la política que consume la UI oculta ambas versiones (con sesión y con token), la página "Document Signed" no ofrece control de descarga y la regla de adjunto por destinatario devuelve `false` | `sign-only-downloads.spec.ts`               |
 | E3  | Cuenta SIGN_ONLY con privilegios SGC (rol de equipo SGC verificado en BD) tampoco descarga: mismas rutas → 403 y política oculta | `sign-only-downloads.spec.ts`               |
 | E4  | Ver no es descargar: la cuenta restringida abre el visor del documento que firma (`…/dataId/{id}/current/item.pdf` → 200 `application/pdf`) mientras la descarga sigue en 403 | `sign-only-downloads.spec.ts`               |
-| E5  | El correo real de "documento completado" que recibe el firmante restringido llega **sin el documento**: se lee del servidor de correo de prueba (`inbucket`) que la firma hace llegar, y ninguna parte del mensaje (ni su fuente SMTP) es un PDF | `sign-only-downloads.spec.ts`               |
+| E5  | El correo real de "documento completado" que recibe el firmante restringido llega **sin el documento**: se lee del servidor de correo de prueba (`inbucket`) que la firma hace llegar, y el mensaje identificado (asunto `Signing Complete!`, dirección de la cuenta entre sus destinatarios y entrada `EMAIL_SENT`/`DOCUMENT_COMPLETED` de esa dirección en el log de auditoría) no lleva el PDF, ni en sus partes MIME ni en su fuente SMTP | `sign-only-downloads.spec.ts`               |
+| E5b | La transición de la que nace la regla: la cuenta se crea como `[USER]`, firma el documento con el perfil completo y se restringe a `SIGN_ONLY` **después del sellado y antes de que el job de completación envíe**. El correo de completación, resuelto sobre el perfil ya restringido en el momento del envío, llega sin PDF; el buzón tiene también la invitación, así que la aserción es sobre el mensaje identificado y no sobre "cualquier mensaje sin PDF" | `sign-only-downloads.spec.ts`               |
 | F1  | Promoción SIGN_ONLY→USER desde `/admin/users/{id}` efectiva en la siguiente petición: el token API previo deja de recibir 403 y la carpeta se crea; no se crea organización personal | `sign-only-profile-changes.spec.ts`         |
 | F2  | Degradación USER→SIGN_ONLY con sesión y token previos: la sesión se invalida (redirige a `/signin`) y el token recibe 403 en su siguiente escritura, sin crear nada | `sign-only-profile-changes.spec.ts`         |
 | F3  | USER promovido sin organización personal trabaja en el equipo asignado: inicia sesión, aterriza en `/t/{team}/documents`, el control de subida existe y su token crea una carpeta en ese equipo | `sign-only-profile-changes.spec.ts`         |
@@ -39,10 +40,10 @@ pueden cubrir hoy quedan enumerados con el motivo exacto.
 | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A2 | Alta por SSO. Requiere un proveedor de identidad OIDC real; no hay harness que lo simule en `packages/app-tests`. La regla (toda alta entrega el perfil restringido) queda cubierta por A1/A3 y por los tests unitarios de `create-user` y `handle-oauth-organisation-callback-url`. Test marcado con `test.skip` en `sign-only-onboarding.spec.ts`, sin evidencia simulada. |
 
-Queda un único escenario fuera de la suite (A2). Los dos que estaban documentados como pendientes ya
+Queda un único escenario fuera de la suite (A2). Los que estaban documentados como pendientes ya
 tienen test: la transición En espera → Pendientes (B) con un documento SEQUENTIAL cuyo segundo
-firmante es la cuenta restringida, y el correo real sin adjunto (E5) leído del servidor de correo de
-prueba.
+firmante es la cuenta restringida, el correo real sin adjunto (E5) leído del servidor de correo de
+prueba, y la transición `[USER]` → `SIGN_ONLY` entre el sellado y el envío (E5b).
 
 ## Cierres de los que dependen los specs (ya en develop)
 
@@ -79,18 +80,55 @@ La mitad "ni adjunto" de E2 se afirma en dos niveles:
   (`send.document.completed.emails`) y el test espera la entrada `EMAIL_SENT` /
   `DOCUMENT_COMPLETED` del log de auditoría para esa dirección antes de leer el buzón, de forma que
   lo que se inspecciona es el correo de cierre y no otro anterior.
+- **Qué mensaje se inspecciona**: el buzón guarda también la invitación a firmar, así que las dos
+  aserciones seleccionan el mensaje como el correo de completación — asunto `Signing Complete!` (el
+  msgstr inglés de `Signing Complete!` que sirve el catálogo) y la dirección de la cuenta entre sus
+  destinatarios — y exigen la entrada de auditoría `EMAIL_SENT` / `DOCUMENT_COMPLETED` de esa misma
+  dirección. "Un mensaje cualquiera sin PDF" no sería evidencia: la invitación tampoco adjunta el
+  documento.
+- **Cuándo se decide**: E5b firma con una cuenta `[USER]` completa, espera a que el documento esté
+  sellado y sólo entonces la restringe, para que el envío resuelva la política sobre el perfil
+  restringido y no sobre el que tenía al completarse el documento.
 
 `inbucket` es el servidor de correo del compose de desarrollo (`docker/development/compose.yml`,
 HTTP en el puerto 9000, SMTP en el 2500), que `npm run dx:up` levanta y que
-`e2e/emails-branding.spec.ts` y `e2e/documents/resend-signed-document.spec.ts` ya usan. E5 necesita
-ese contenedor en marcha, como el resto de la suite de correo.
+`e2e/emails-branding.spec.ts` y `e2e/documents/resend-signed-document.spec.ts` ya usan. E5 y E5b
+necesitan ese contenedor en marcha, como el resto de la suite de correo.
+
+### La ventana de E5b (sellado → restricción → envío)
+
+El sellado (`internal.seal-document`) y el envío (`send.document.completed.emails`) son jobs: el
+segundo lo encola el primero cuando termina. En esos dos pasos, E5b restringe la cuenta con la
+siguiente secuencia, dentro de una única transacción de la base de datos:
+
+1. espera a que el job de sellado esté en `PROCESSING` (con el documento aún sin sellar);
+2. toma `LOCK TABLE "BackgroundJob" IN SHARE MODE`: mientras el lock esté tomado el sellado no puede
+   insertar la fila del job de envío, así que nada se envía;
+3. espera, ya con el lock tomado, a que la transacción del sellado confirme `COMPLETED` (el paso 2
+   no la bloquea: el sellado escribe en `Envelope`/`Recipient`/`DocumentAuditLog`, no en la tabla de
+   jobs);
+4. escribe `roles: [SIGN_ONLY]` y confirma: el lock se libera en el mismo commit que hace visible la
+   restricción, de modo que el job de envío que el sellado encola después ya no puede resolverse
+   sobre el perfil completo.
+
+El test no se fía del orden de sus propios pasos: lo lee de la base de datos. Antes de tomar el lock
+comprueba que el job de envío **no** existe todavía y que el documento no está sellado (si la
+carrera se hubiera perdido, falla ahí en vez de pasar en falso); después comprueba que
+`Envelope.completedAt` es anterior a la restricción y que la entrada de auditoría del envío es
+posterior.
+
+Margen de la carrera del paso 1: el lock tiene que entrar mientras el sellado trabaja, y el sellado
+tarda segundos (los logs de CI del run 36216086570 separan el sellado del encolado del correo entre
+1,8 s y 4,8 s). El coste del mecanismo es que, mientras el lock está tomado (~el tiempo del sellado),
+los envíos de jobs de todo el proceso esperan a que se libere; es un lock de corta duración y sólo
+bloquea escrituras en esa tabla.
 
 ## Cómo ejecutar
 
 Requisitos: Postgres accesible, `DATABASE_URL` en `.env`, migraciones aplicadas, `inbucket` en
-marcha (lo levanta `npm run dx:up`; sólo lo necesitan los escenarios que leen correo, E5 entre
-ellos) y la app levantada (o usar `npm run test:e2e`, que arranca el servidor). Los paths de
-Playwright se resuelven desde `packages/app-tests`.
+marcha (lo levanta `npm run dx:up`; sólo lo necesitan los escenarios que leen correo, E5 y E5b) y
+la app levantada (o usar `npm run test:e2e`, que arranca el servidor). Los paths de Playwright se
+resuelven desde `packages/app-tests`.
 
 ```bash
 # Todo el bloque SIGN_ONLY (proyecto ui)
@@ -124,3 +162,17 @@ NODE_OPTIONS='--import tsx' npx playwright test --list --project=ui e2e/sign-onl
   página, en el formato superjson no batcheado que usan los helpers de consulta existentes. El
   cuerpo lleva el schema completo: `team.create` exige `inheritMembers` (no tiene default), así que
   G1 lo envía explícitamente; sin él la mutación ni siquiera llega al handler.
+- Firmar un documento de envelope v2 no es sólo rellenar el pad: los campos se dibujan en el canvas
+  de Konva, así que el pad del formulario fija la firma y el campo se inserta **haciendo clic sobre
+  el campo en el canvas** (el mismo paso que usa
+  `e2e/envelopes/envelope-v2-field-insertion.spec.ts`). A4, B y E5/E5b usan para eso
+  `signEnvelopeSignatureField` de `e2e/fixtures/signature.ts`, que espera además a que el campo
+  quede `inserted` en la base de datos; sin el clic el formulario sigue diciendo "1 Field Remaining"
+  y el botón de cierre se llama "Next Field", no "Complete".
+- A4 y E5b siembran el documento por la API (`apiSeedPendingDocument`), que crea el envelope como lo
+  hace el producto y añade un campo de firma por firmante. El `seedPendingDocument` de
+  `@documenso/prisma/seed/documents` sólo crea un campo `NAME` ya insertado: con él no hay pad de
+  firma que abrir ni campo que firmar.
+- E5b restringe la cuenta con una escritura de Prisma dentro de la transacción del lock (ver arriba)
+  y no por la ruta de administración: la restricción tiene que confirmarse en el mismo commit que
+  libera el lock. La ruta `admin.user.update` está cubierta por F1/F2.

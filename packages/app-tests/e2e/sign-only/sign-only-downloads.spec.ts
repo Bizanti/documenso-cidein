@@ -19,6 +19,12 @@
  *   already uses (`inbucket`), so the "ni adjunto" half of E2 is asserted
  *   against a message that really went out, not only against the policy the
  *   senders call.
+ * - E5b (covered): the transition the rule exists for. A full account signs a
+ *   document and is restricted to the sign only profile once the document is
+ *   sealed and before the completion email job has sent anything, so the
+ *   message is resolved on the restricted profile at send time and arrives
+ *   without the document. The window is held by a lock on the job table, see the
+ *   test.
  * - G2 (covered): an addressee without an account is ruled by its recipient role
  *   alone, so an external signer may still receive and download the document.
  */
@@ -31,7 +37,14 @@ import { prisma } from '@documenso/prisma';
 import { seedCompletedDocument, seedPendingDocument } from '@documenso/prisma/seed/documents';
 import { seedTestEmail, seedUser } from '@documenso/prisma/seed/users';
 import { expect, type Page, test } from '@playwright/test';
-import { DocumentStatus, RecipientRole, TeamMemberRole } from '@prisma/client';
+import {
+  BackgroundJobStatus,
+  DocumentStatus,
+  FieldType,
+  RecipientRole,
+  Role,
+  TeamMemberRole,
+} from '@prisma/client';
 
 import { apiSeedPendingDocument } from '../fixtures/api-seeds';
 import { apiSignin } from '../fixtures/authentication';
@@ -44,7 +57,7 @@ import {
   seedSignOnlyMemberContext,
   seedSignOnlyUser,
 } from '../fixtures/sign-only';
-import { signSignaturePad } from '../fixtures/signature';
+import { signEnvelopeSignatureField } from '../fixtures/signature';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -57,8 +70,31 @@ test.describe.configure({ mode: 'parallel' });
  */
 const INBUCKET_URL = 'http://localhost:9000';
 
+/**
+ * The subject of the completion email, the translated `Signing Complete!` of
+ * `send-document-completed-emails.handler` which the English catalogue serves
+ * verbatim. It is what tells the completion message apart from the signing
+ * request sitting in the same mailbox.
+ */
+const COMPLETION_EMAIL_SUBJECT = 'Signing Complete!';
+
+/**
+ * The job which seals a document once every recipient has signed, and the job
+ * which sends the completion email afterwards. E5b watches both of them.
+ */
+const SEAL_DOCUMENT_JOB_ID = 'internal.seal-document';
+const COMPLETION_EMAIL_JOB_ID = 'send.document.completed.emails';
+
+/**
+ * The table the job rows live in. E5b locks it to hold the send back; see the
+ * test for why the window has to be held there.
+ */
+const BACKGROUND_JOB_TABLE = '"BackgroundJob"';
+
 type InbucketMessage = {
   id: string;
+  subject?: string;
+  to?: string[];
 };
 
 type InbucketMessagePart = {
@@ -79,15 +115,64 @@ const getMailboxMessages = async (email: string) => {
   return (await response.json()) as InbucketMessage[];
 };
 
+/**
+ * The messages of the mailbox which are the completion email addressed to
+ * `email`.
+ *
+ * Selected by subject and addressee, not by "a message which happens to carry no
+ * PDF": the mailbox also holds the signing request, and a message without an
+ * attachment proves nothing on its own.
+ */
+const getCompletionMessages = async (email: string) => {
+  const normalizedEmail = email.toLowerCase();
+
+  const messages = await getMailboxMessages(email);
+
+  return messages.filter(
+    (message) =>
+      message.subject === COMPLETION_EMAIL_SUBJECT &&
+      (message.to ?? []).some((addressee) => addressee.toLowerCase().includes(normalizedEmail)),
+  );
+};
+
+/**
+ * The audit log entries which record the send of the completion email to
+ * `email`, with the time each one was written. They are what ties the message
+ * read from the mailbox to the send this scenario is about.
+ */
+const getCompletionEmailAuditLogs = async (envelopeId: string, email: string) => {
+  const auditLogs = await prisma.documentAuditLog.findMany({
+    where: {
+      envelopeId,
+      type: 'EMAIL_SENT',
+      data: {
+        path: ['emailType'],
+        equals: 'DOCUMENT_COMPLETED',
+      },
+    },
+    select: {
+      data: true,
+      createdAt: true,
+    },
+  });
+
+  return auditLogs.filter((auditLog) => (auditLog.data as { recipientEmail?: string }).recipientEmail === email);
+};
+
 /** The MIME parts a message carries, as the test mail server parses them. */
 const getMessageParts = async (email: string, messageId: string) => {
   const mailbox = email.split('@')[0];
 
   const response = await fetch(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}/${messageId}`);
 
-  expect(response.ok, `could not read message ${messageId}: ${await response.text()}`).toBe(true);
+  // The body is read once: reading it in the assertion message below would
+  // consume it and leave nothing for the parse, since `fetch` hands out a body
+  // only once.
+  const body = await response.text();
 
-  const details = (await response.json()) as { attachments?: InbucketMessagePart[] };
+  expect(response.ok, `could not read message ${messageId}: ${body}`).toBe(true);
+
+  const details = JSON.parse(body) as { attachments?: InbucketMessagePart[] };
 
   return details.attachments ?? [];
 };
@@ -419,9 +504,10 @@ test('E5: the completion email a restricted signer receives travels without the 
   });
 
   const recipient = distributeResult.recipients[0];
+  const signatureField = envelope.fields.find((field) => field.type === FieldType.SIGNATURE);
 
-  if (!recipient) {
-    throw new Error('The distribution did not hand out a signing token for the restricted signer');
+  if (!recipient || !signatureField) {
+    throw new Error('The distribution did not hand out a signing token and a signature field');
   }
 
   // The restricted account signs for real: that is what completes the document
@@ -429,10 +515,11 @@ test('E5: the completion email a restricted signer receives travels without the 
   await apiSignin({ page, email: signOnlyUser.email, redirectPath: '/' });
 
   await page.goto(`/sign/${recipient.token}`);
-  await signSignaturePad(page);
+  await signEnvelopeSignatureField(page, signatureField);
+
   await page.getByRole('button', { name: 'Complete' }).click();
-  await page.waitForTimeout(1000);
-  await page.getByRole('button', { name: 'Sign' }).click({ force: true });
+  await expect(page.getByRole('heading', { name: 'Are you sure?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sign' }).click();
 
   await page.waitForURL(`/sign/${recipient.token}/complete`);
 
@@ -456,49 +543,273 @@ test('E5: the completion email a restricted signer receives travels without the 
   // before reading the mailbox: the assertions below must run against that
   // message, not against an earlier one.
   await expect
-    .poll(
-      async () => {
-        const sentEmails = await prisma.documentAuditLog.findMany({
-          where: {
-            envelopeId: envelope.id,
-            type: 'EMAIL_SENT',
-            data: {
-              path: ['emailType'],
-              equals: 'DOCUMENT_COMPLETED',
-            },
-          },
-          select: {
-            data: true,
-          },
-        });
+    .poll(async () => (await getCompletionEmailAuditLogs(envelope.id, signOnlyUser.email)).length, { timeout: 30_000 })
+    .toBeGreaterThan(0);
 
-        return sentEmails.some(
-          (email) => (email.data as { recipientEmail?: string }).recipientEmail === signOnlyUser.email,
-        );
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(true);
-
-  // Nothing in this mailbox may carry the document: the signing request does not
-  // attach it either, and the completion email has to withhold it because the
+  // The message the assertion is about is the completion email addressed to the
+  // restricted account, selected by subject and addressee: a message without a
+  // PDF is not evidence on its own, and the mailbox also holds the signing
+  // request. The completion email has to withhold the document because the
   // addressee cannot download it. Asserted against the parsed parts and the raw
   // source, so an inline logo is allowed but a PDF part is not.
   await expect(async () => {
-    const messages = await getMailboxMessages(signOnlyUser.email);
+    const completionMessages = await getCompletionMessages(signOnlyUser.email);
 
-    expect(messages.length).toBeGreaterThan(0);
+    expect(completionMessages.length).toBeGreaterThan(0);
 
-    for (const message of messages) {
+    for (const message of completionMessages) {
       const parts = await getMessageParts(signOnlyUser.email, message.id);
 
       const documentPart = parts.find((part) => part['content-type'] === 'application/pdf');
 
-      expect(documentPart, `message ${message.id} carried the document as ${documentPart?.filename}`).toBeUndefined();
+      expect(
+        documentPart,
+        `completion message ${message.id} carried the document as ${documentPart?.filename}`,
+      ).toBeUndefined();
 
       const source = await getMessageSource(signOnlyUser.email, message.id);
 
-      expect(source, `message ${message.id} attached a PDF part`).not.toContain('application/pdf');
+      expect(source, `completion message ${message.id} attached a PDF part`).not.toContain('application/pdf');
+    }
+  }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
+});
+
+test('E5b: an account restricted once the document is sealed receives the completion email without the document', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(180_000);
+
+  // The seal and the send this test is about are jobs of its own document, and
+  // every job row it looks at was created after it started: that is what keeps
+  // the lookups off the rows of the tests running in parallel.
+  const testStartedAt = new Date();
+
+  // A full account, not a restricted one: it signs the document while it still
+  // carries the whole profile and is only restricted afterwards, which is the
+  // transition the send-time rule exists for.
+  const { user: signer } = await seedUser({ name: 'E5b Transition Signer' });
+
+  const { envelope, distributeResult } = await apiSeedPendingDocument(request, {
+    title: '[TEST] E5b restricted after sealing',
+    recipients: [{ email: signer.email, name: 'E5b Transition Signer', role: 'SIGNER' }],
+  });
+
+  const recipient = distributeResult.recipients[0];
+  const signatureField = envelope.fields.find((field) => field.type === FieldType.SIGNATURE);
+
+  if (!recipient || !signatureField) {
+    throw new Error('The distribution did not hand out a signing token and a signature field');
+  }
+
+  await apiSignin({ page, email: signer.email, redirectPath: '/' });
+
+  await page.goto(`/sign/${recipient.token}`);
+  await signEnvelopeSignatureField(page, signatureField);
+
+  // Signing completes the document and triggers the seal, which is what enqueues
+  // the completion email further down. The account is a full account here.
+  await page.getByRole('button', { name: 'Complete' }).click();
+  await expect(page.getByRole('heading', { name: 'Are you sure?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sign' }).click();
+
+  await page.waitForURL(`/sign/${recipient.token}/complete`);
+
+  const legacyDocumentId = mapSecondaryIdToDocumentId(envelope.secondaryId);
+
+  const getJobRows = async (jobId: string) =>
+    await prisma.backgroundJob.findMany({
+      where: {
+        jobId,
+        submittedAt: {
+          gte: testStartedAt,
+        },
+      },
+      orderBy: {
+        submittedAt: 'asc',
+      },
+      select: {
+        payload: true,
+        status: true,
+      },
+    });
+
+  const getSealJobStatus = async () => {
+    const sealJobs = await getJobRows(SEAL_DOCUMENT_JOB_ID);
+
+    return sealJobs.find((job) => (job.payload as { documentId?: number } | null)?.documentId === legacyDocumentId)
+      ?.status;
+  };
+
+  const getSendJobs = async () => {
+    const sendJobs = await getJobRows(COMPLETION_EMAIL_JOB_ID);
+
+    return sendJobs.filter((job) => (job.payload as { envelopeId?: string } | null)?.envelopeId === envelope.id);
+  };
+
+  // The seal has to be running before the lock below is taken: taken any earlier
+  // it would hold the seal's own job row back and the document would never be
+  // sealed. The seal spends seconds signing the PDF (the CI logs put it between
+  // 1.8 and 4.8 seconds apart from the enqueue of the completion email it
+  // triggers), which is the window the lock is taken in.
+  await expect
+    .poll(async () => await getSealJobStatus(), { timeout: 30_000, intervals: [25] })
+    .toBe(BackgroundJobStatus.PROCESSING);
+
+  // The window between the seal and the send, held by a lock on the job table:
+  //
+  //   1. the seal commits while the account is still a full account, which is
+  //      the profile the send would otherwise have resolved,
+  //   2. the lock stops the seal from inserting the job row that sends the
+  //      completion email, so nothing can be sent while the restriction is
+  //      written,
+  //   3. the restriction is committed with the lock still held, so the send the
+  //      seal then enqueues can only resolve the policy on the restricted
+  //      profile.
+  //
+  // The database then carries the window back: the document was sealed before
+  // the restriction, and the send happened after it. The send job of the
+  // envelope may only exist because the lock was released by the commit which
+  // wrote the restriction.
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`LOCK TABLE ${BACKGROUND_JOB_TABLE} IN SHARE MODE`);
+
+      const enqueuedSends = await tx.backgroundJob.findMany({
+        where: {
+          jobId: COMPLETION_EMAIL_JOB_ID,
+          submittedAt: {
+            gte: testStartedAt,
+          },
+        },
+        select: {
+          payload: true,
+        },
+      });
+
+      const sendsForThisDocument = enqueuedSends.filter(
+        (job) => (job.payload as { envelopeId?: string } | null)?.envelopeId === envelope.id,
+      );
+
+      expect(sendsForThisDocument, 'the completion email was already enqueued when the lock was taken').toHaveLength(
+        0,
+      );
+
+      const envelopeBeforeSeal = await tx.envelope.findFirstOrThrow({
+        where: {
+          id: envelope.id,
+        },
+        select: {
+          status: true,
+        },
+      });
+
+      expect(envelopeBeforeSeal.status, 'the document was sealed before the lock was taken').not.toBe(
+        DocumentStatus.COMPLETED,
+      );
+
+      // The seal cannot reach the send while the lock is held, so its commit is
+      // awaited here and can only land before the restriction written below.
+      await expect
+        .poll(
+          async () => {
+            const sealed = await tx.envelope.findFirstOrThrow({
+              where: {
+                id: envelope.id,
+              },
+              select: {
+                status: true,
+              },
+            });
+
+            return sealed.status;
+          },
+          { timeout: 90_000, intervals: [100] },
+        )
+        .toBe(DocumentStatus.COMPLETED);
+
+      await tx.user.update({
+        where: {
+          id: signer.id,
+        },
+        data: {
+          roles: [Role.SIGN_ONLY],
+        },
+      });
+    },
+    { timeout: 120_000, maxWait: 30_000 },
+  );
+
+  const restrictedAccount = await prisma.user.findFirstOrThrow({
+    where: {
+      id: signer.id,
+    },
+    select: {
+      roles: true,
+      updatedAt: true,
+    },
+  });
+
+  expect(restrictedAccount.roles).toEqual([Role.SIGN_ONLY]);
+
+  // The document was sealed while the account was still a full account.
+  const sealedEnvelope = await prisma.envelope.findFirstOrThrow({
+    where: {
+      id: envelope.id,
+    },
+    select: {
+      completedAt: true,
+    },
+  });
+
+  expect(sealedEnvelope.completedAt, 'the seal never completed').not.toBeNull();
+  expect(sealedEnvelope.completedAt?.getTime()).toBeLessThan(restrictedAccount.updatedAt.getTime());
+
+  // The message goes out from the job the seal enqueues, so wait until the send
+  // of the completion email addressed to the account is on the audit log before
+  // reading the mailbox.
+  await expect
+    .poll(async () => (await getCompletionEmailAuditLogs(envelope.id, signer.email)).length, { timeout: 30_000 })
+    .toBeGreaterThan(0);
+
+  // The job which sent it only exists because the seal enqueued it after the
+  // lock was released, which is the release that committed the restriction.
+  const sendJobs = await getSendJobs();
+
+  expect(sendJobs, 'the seal never enqueued the completion email').not.toHaveLength(0);
+
+  // Every recorded send of the completion email to that address happened after
+  // the restriction was committed.
+  const completionEmailAuditLogs = await getCompletionEmailAuditLogs(envelope.id, signer.email);
+
+  for (const auditLog of completionEmailAuditLogs) {
+    expect(auditLog.createdAt.getTime()).toBeGreaterThan(restrictedAccount.updatedAt.getTime());
+  }
+
+  // The send resolved the addressee's policy at send time, so the completion
+  // email which went out after the restriction carries no document. The mailbox
+  // holds the signing request as well, so the message under test is the one
+  // selected by subject and addressee.
+  await expect(async () => {
+    const mailboxMessages = await getMailboxMessages(signer.email);
+    const completionMessages = await getCompletionMessages(signer.email);
+
+    expect(mailboxMessages.length, 'the mailbox holds the signing request too').toBeGreaterThan(1);
+    expect(completionMessages.length).toBeGreaterThan(0);
+
+    for (const message of completionMessages) {
+      const parts = await getMessageParts(signer.email, message.id);
+
+      const documentPart = parts.find((part) => part['content-type'] === 'application/pdf');
+
+      expect(
+        documentPart,
+        `completion message ${message.id} carried the document as ${documentPart?.filename}`,
+      ).toBeUndefined();
+
+      const source = await getMessageSource(signer.email, message.id);
+
+      expect(source, `completion message ${message.id} attached a PDF part`).not.toContain('application/pdf');
     }
   }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
 });
