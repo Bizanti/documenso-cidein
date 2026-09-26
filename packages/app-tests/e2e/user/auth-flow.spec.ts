@@ -1,12 +1,17 @@
 import { prisma } from '@documenso/prisma';
 import { extractUserVerificationToken, seedTestEmail, seedUser } from '@documenso/prisma/seed/users';
 import { expect, type Page, test } from '@playwright/test';
+import { Role } from '@prisma/client';
 
 import { signSignaturePad } from '../fixtures/signature';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-test('[USER] can sign up with email and password', async ({ page }: { page: Page }) => {
+test('[SIGN_ONLY] can sign up with email and password and lands on the signing inbox', async ({
+  page,
+}: {
+  page: Page;
+}) => {
   const username = 'Test User';
   const email = seedTestEmail();
   const password = 'Password123#';
@@ -27,19 +32,23 @@ test('[USER] can sign up with email and password', async ({ page }: { page: Page
 
   const { token } = await extractUserVerificationToken(email);
 
-  const team = await prisma.team.findFirstOrThrow({
+  const user = await prisma.user.findFirstOrThrow({
     where: {
-      organisation: {
-        members: {
-          some: {
-            user: {
-              email,
-            },
-          },
-        },
-      },
+      email,
     },
   });
+
+  // Every account starts with the restricted profile and without a personal
+  // workspace, so there is no organisation to own and no team to land on.
+  expect(user.roles).toEqual([Role.SIGN_ONLY]);
+
+  const organisation = await prisma.organisation.findFirst({
+    where: {
+      ownerUserId: user.id,
+    },
+  });
+
+  expect(organisation).toBeNull();
 
   await page.goto(`/verify-email/${token}`);
 
@@ -48,9 +57,10 @@ test('[USER] can sign up with email and password', async ({ page }: { page: Page
   // We now automatically redirect to the home page
   await page.getByRole('link', { name: 'Continue' }).click();
 
-  // Expect to be redirected to their only team.
-  await page.waitForURL(`/t/${team.url}/documents`);
-  await expect(page).toHaveURL(`/t/${team.url}/documents`);
+  // The signing inbox is the whole application for a restricted account.
+  await page.waitForURL('/mis-firmas');
+  await expect(page).toHaveURL('/mis-firmas');
+  await expect(page.getByTestId('mis-firmas-page')).toBeVisible();
 });
 
 test('[USER] can sign in using email and password', async ({ page }: { page: Page }) => {
