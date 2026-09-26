@@ -1,6 +1,10 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { getAccountRolesById } from '@documenso/lib/server-only/auth/document-authorization';
 import {
+  resolveAccountForAuthorization,
+  type TAuthorizationAccount,
+} from '@documenso/lib/server-only/auth/resolve-account-for-authorization';
+import {
   buildEnvelopeDownloadPolicy,
   getEnvelopeItemDownloadDenial,
 } from '@documenso/lib/server-only/document/download-policy';
@@ -17,6 +21,13 @@ import {
 } from './get-envelope-download-policies.types';
 
 /**
+ * Recipient addresses are matched case insensitively, so they are normalized
+ * before they are used as keys: the same account must not be looked up twice
+ * because two recipients wrote its address differently.
+ */
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+/**
  * Resolves the download policy (expired window, allowed versions) for the given
  * envelopes for the current viewer, so the UI can show a locked state instead of
  * letting the download fail with a raw 403.
@@ -30,6 +41,11 @@ import {
  * token viewer is applied, so a restricted account and a controlled signer are
  * told they cannot download - and the controls are hidden - instead of finding
  * out through a 403.
+ *
+ * A token viewer is resolved through the account behind the recipient's address
+ * as well, because presenting a signing link does not turn a restricted account
+ * into an anonymous one: the download routes deny it on the strength of its
+ * account, so the policy has to say so instead of offering it a download.
  */
 export const getEnvelopeDownloadPoliciesRoute = procedure
   .input(ZGetEnvelopeDownloadPoliciesRequestSchema)
@@ -93,6 +109,7 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
     // reject.
     const tokenEnvelopeIds = new Set<string>();
     const tokenRecipientRoles = new Map<string, RecipientRole>();
+    const tokenRecipientEmails = new Map<string, string>();
 
     if (viewerTokens.length > 0) {
       envelopes.forEach((envelope) => {
@@ -109,14 +126,29 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
         select: {
           envelopeId: true,
           role: true,
+          email: true,
         },
       });
 
       for (const recipient of tokenRecipients) {
         tokenEnvelopeIds.add(recipient.envelopeId);
         tokenRecipientRoles.set(recipient.envelopeId, recipient.role);
+        tokenRecipientEmails.set(recipient.envelopeId, normalizeEmail(recipient.email));
       }
     }
+
+    // The account behind the address of a token viewer, resolved once per
+    // address. A lookup which does not complete throws, so an unreadable answer
+    // never turns into a permissive policy.
+    const recipientAccounts = new Map<string, TAuthorizationAccount | null>();
+
+    await Promise.all(
+      Array.from(new Set(tokenRecipientEmails.values()))
+        .filter(Boolean)
+        .map(async (email) => {
+          recipientAccounts.set(email, await resolveAccountForAuthorization(email));
+        }),
+    );
 
     const teamRoles = new Map<number, TeamMemberRole>();
 
@@ -144,12 +176,18 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
       data: envelopes.map((envelope) => {
         const isTokenEnvelope = tokenEnvelopeIds.has(envelope.id);
 
+        // A token viewer answers to the account behind the recipient address just
+        // as a session viewer answers to its own.
+        const recipientAccount = isTokenEnvelope
+          ? (recipientAccounts.get(tokenRecipientEmails.get(envelope.id) ?? '') ?? null)
+          : null;
+
         const policy = buildEnvelopeDownloadPolicy({
           status: envelope.status,
           completedAt: envelope.completedAt,
           windowHours: envelope.documentMeta?.downloadWindowHours ?? globalWindowHours,
           role: isTokenEnvelope ? null : (teamRoles.get(envelope.teamId) ?? null),
-          accountRoles: isTokenEnvelope ? null : (account?.roles ?? null),
+          accountRoles: isTokenEnvelope ? (recipientAccount?.roles ?? null) : (account?.roles ?? null),
           recipientRole: isTokenEnvelope ? (tokenRecipientRoles.get(envelope.id) ?? null) : null,
         });
 
