@@ -30,6 +30,9 @@ jobs:
       - name: Run unit tests (email transports)
         run: npm run test -w @documenso/email
 
+      - name: Run unit tests (trpc)
+        run: npm run test -w @documenso/trpc
+
   build_app:
     name: Build App
     runs-on: ubuntu-latest
