@@ -13,15 +13,14 @@
  */
 
 import { prisma } from '@documenso/prisma';
-import { seedPendingDocument } from '@documenso/prisma/seed/documents';
-import { seedTestEmail, seedUser } from '@documenso/prisma/seed/users';
+import { seedTestEmail } from '@documenso/prisma/seed/users';
 import { expect, test } from '@playwright/test';
-import { DocumentStatus, SigningStatus } from '@prisma/client';
+import { DocumentStatus, FieldType, SigningStatus } from '@prisma/client';
 
 import { apiSeedPendingDocument } from '../fixtures/api-seeds';
 import { apiSignin } from '../fixtures/authentication';
 import { SIGN_ONLY_HOME, seedSignOnlyUser } from '../fixtures/sign-only';
-import { signSignaturePad } from '../fixtures/signature';
+import { signEnvelopeSignatureField } from '../fixtures/signature';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -36,20 +35,28 @@ const SIGNATURE_FIELD = {
   height: 5,
 };
 
-test('A4: a sign only account signs a document from its inbox and it moves to the history', async ({ page }) => {
-  const { user: owner, team } = await seedUser();
-
+test('A4: a sign only account signs a document from its inbox and it moves to the history', async ({
+  page,
+  request,
+}) => {
   const signOnlyUser = await seedSignOnlyUser({ name: 'A4 Signer' });
 
   const title = '[TEST] A4 sign only signing';
 
-  const document = await seedPendingDocument(owner, team.id, [signOnlyUser.email], {
-    createDocumentOptions: {
-      title,
-    },
+  // The document is created and distributed the way the product does, and the
+  // fixture adds the signature field the signer has to fill: a document seeded
+  // without one offers no signature pad, so there would be nothing to sign.
+  const { envelope, distributeResult } = await apiSeedPendingDocument(request, {
+    title,
+    recipients: [{ email: signOnlyUser.email, name: 'A4 Signer', role: 'SIGNER' }],
   });
 
-  const recipient = document.recipients[0];
+  const recipient = distributeResult.recipients[0];
+  const signatureField = envelope.fields.find((field) => field.type === FieldType.SIGNATURE);
+
+  if (!recipient || !signatureField) {
+    throw new Error('The distribution did not hand out a signing token and a signature field');
+  }
 
   await apiSignin({ page, email: signOnlyUser.email, redirectPath: '/' });
 
@@ -68,23 +75,23 @@ test('A4: a sign only account signs a document from its inbox and it moves to th
 
   await page.waitForURL(`/sign/${recipient.token}`);
 
-  await signSignaturePad(page);
+  await signEnvelopeSignatureField(page, signatureField);
 
   await page.getByRole('button', { name: 'Complete' }).click();
-  await page.waitForTimeout(1000);
-  await page.getByRole('button', { name: 'Sign' }).click({ force: true });
+  await expect(page.getByRole('heading', { name: 'Are you sure?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sign' }).click();
 
   await page.waitForURL(`/sign/${recipient.token}/complete`);
 
   await expect
     .poll(async () => {
-      const envelope = await prisma.envelope.findFirstOrThrow({
+      const sealedEnvelope = await prisma.envelope.findFirstOrThrow({
         where: {
-          id: document.id,
+          id: envelope.id,
         },
       });
 
-      return envelope.status;
+      return sealedEnvelope.status;
     })
     .toBe(DocumentStatus.COMPLETED);
 
@@ -160,7 +167,7 @@ test('B: a waiting document turns into a pending one once the preceding signer s
   // turn only arrives after the first signature, which is what the transition
   // asserts. The title is a single document this time, so the sections can only
   // hold this one row.
-  const { distributeResult } = await apiSeedPendingDocument(request, {
+  const { envelope, distributeResult } = await apiSeedPendingDocument(request, {
     title: '[TEST] B waiting to pending',
     meta: { signingOrder: 'SEQUENTIAL' },
     recipients: [
@@ -175,6 +182,14 @@ test('B: a waiting document turns into a pending one once the preceding signer s
 
   if (!firstSigner || !restrictedRecipient) {
     throw new Error('The distribution did not hand out a signing token for both recipients');
+  }
+
+  const firstSignerField = envelope.fields.find(
+    (field) => field.recipientId === firstSigner.id && field.type === FieldType.SIGNATURE,
+  );
+
+  if (!firstSignerField) {
+    throw new Error('The distribution did not hand out a signature field for the first signer');
   }
 
   await apiSignin({ page, email: signOnlyUser.email, redirectPath: '/' });
@@ -201,11 +216,11 @@ test('B: a waiting document turns into a pending one once the preceding signer s
     await firstSignerPage.goto(`/sign/${firstSigner.token}`);
     await expect(firstSignerPage.getByRole('heading', { name: 'Sign Document' })).toBeVisible();
 
-    await signSignaturePad(firstSignerPage);
+    await signEnvelopeSignatureField(firstSignerPage, firstSignerField);
 
     await firstSignerPage.getByRole('button', { name: 'Complete' }).click();
-    await firstSignerPage.waitForTimeout(1000);
-    await firstSignerPage.getByRole('button', { name: 'Sign' }).click({ force: true });
+    await expect(firstSignerPage.getByRole('heading', { name: 'Are you sure?' })).toBeVisible();
+    await firstSignerPage.getByRole('button', { name: 'Sign' }).click();
 
     await firstSignerPage.waitForURL(`/sign/${firstSigner.token}/complete`);
   } finally {
