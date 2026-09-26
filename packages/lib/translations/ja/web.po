@@ -1587,6 +1587,7 @@ msgstr "メールの末尾に表示する追加のブランド情報"
 
 #: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
 #: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/components/general/role-profile-select.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/_layout.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/organisations.$id.tsx
 #: packages/lib/constants/organisations-translations.ts
@@ -4925,6 +4926,14 @@ msgstr "閲覧された文書"
 msgid "Documents where all recipients have signed but the document has not been sealed. Documents stuck for more than 6 hours are no longer retried by the sweep job."
 msgstr "すべての受信者が署名したものの、まだ封印されていない文書です。6時間以上スタックしている文書は、スイープジョブによって再試行されなくなります。"
 
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "Documents which have been shared with you to sign."
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "Documents you have already signed or rejected."
+msgstr ""
+
 #: apps/remix/app/routes/_authenticated+/admin+/organisation-stats._index.tsx
 msgid "Documents, emails and api values may not be accurate since they record the amount of times the action was attempted. Meaning these values may go over the actual quota, get rejected, and will still be recorded."
 msgstr "ドキュメント、メール、および API の数値は、アクションが試行された回数を記録しているため、正確ではない場合があります。つまり、これらの数値は実際のクォータを超えたり、拒否されたりしても、それでも記録される可能性があります。"
@@ -6327,6 +6336,11 @@ msgstr "フランス語"
 msgid "From"
 msgstr "送信元"
 
+#. placeholder {0}: document.senderName
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "From {0}"
+msgstr ""
+
 #: apps/remix/app/components/forms/email-transport-form.tsx
 msgid "From address"
 msgstr "送信元アドレス"
@@ -6620,6 +6634,10 @@ msgstr ""
 #: apps/remix/app/components/general/admin-license-card.tsx
 msgid "Hide license key"
 msgstr "ライセンスキーを非表示にする"
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "History"
+msgstr ""
 
 #: apps/remix/app/components/dialogs/folder-move-dialog.tsx
 #: apps/remix/app/components/general/folder/folder-grid.tsx
@@ -7761,6 +7779,14 @@ msgstr "複数のアクセス方法を選択できます。"
 msgid "My Folder"
 msgstr "マイフォルダ"
 
+#: apps/remix/app/components/general/app-nav-desktop.tsx
+#: apps/remix/app/components/general/app-nav-mobile.tsx
+#: apps/remix/app/components/general/org-menu-switcher.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "My signatures"
+msgstr ""
+
 #: apps/remix/app/components/tables/admin-document-logs-table.tsx
 #: apps/remix/app/components/tables/document-logs-table.tsx
 #: apps/remix/app/components/tables/internal-audit-log-table.tsx
@@ -8111,7 +8137,7 @@ msgstr "有効なダイレクトテンプレートが見つかりません"
 msgid "No valid recipients found"
 msgstr "有効な受信者が見つかりません"
 
-#: apps/remix/app/components/general/multiselect-role-combobox.tsx
+#: apps/remix/app/components/general/role-profile-select.tsx
 #: packages/ui/primitives/combobox.tsx
 #: packages/ui/primitives/multi-select-combobox.tsx
 msgid "No value found."
@@ -8722,6 +8748,7 @@ msgstr "PDF文書"
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains._index.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains._index.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains.$id.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.members.tsx
 #: packages/lib/constants/document.ts
 #: packages/ui/components/document/document-read-only-fields.tsx
@@ -9152,6 +9179,7 @@ msgid "Processing document"
 msgstr "ドキュメントを処理しています"
 
 #: apps/remix/app/components/general/app-command-menu.tsx
+#: apps/remix/app/routes/_authenticated+/admin+/users.$id.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/profile.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/profile.tsx
 #: apps/remix/app/routes/_profile+/_layout.tsx
@@ -9574,6 +9602,7 @@ msgstr "ドキュメントを却下"
 #: apps/remix/app/components/general/document/document-status.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-header.tsx
 #: apps/remix/app/components/general/stack-avatars-with-tooltip.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_internal+/[__htmltopdf]+/certificate.tsx
 #: packages/lib/constants/document.ts
 #: packages/lib/server-only/pdf/render-certificate.ts
@@ -10028,7 +10057,6 @@ msgid "Role"
 msgstr "役割"
 
 #: apps/remix/app/components/tables/admin-dashboard-users-table.tsx
-#: apps/remix/app/routes/_authenticated+/admin+/users.$id.tsx
 msgid "Roles"
 msgstr "ロール"
 
@@ -10185,6 +10213,7 @@ msgid "Secret"
 msgstr "シークレット"
 
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx
+#: apps/remix/app/components/general/org-menu-switcher.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/security._index.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/security._index.tsx
 #: packages/lib/utils/settings-nav.ts
@@ -10614,6 +10643,7 @@ msgstr "Documenso 用のパスワードを設定してください"
 #: apps/remix/app/components/general/app-command-menu.tsx
 #: apps/remix/app/components/general/app-nav-mobile.tsx
 #: apps/remix/app/components/general/app-nav-mobile.tsx
+#: apps/remix/app/components/general/app-nav-mobile.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor.tsx
 #: apps/remix/app/components/general/folder/folder-card.tsx
@@ -10700,6 +10730,7 @@ msgstr "割り当てを含む利用状況を表示する"
 #: apps/remix/app/components/tables/documents-table-action-button.tsx
 #: apps/remix/app/components/tables/documents-table-action-dropdown.tsx
 #: apps/remix/app/components/tables/inbox-table.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_profile+/p.$url.tsx
 msgid "Sign"
 msgstr "署名"
@@ -10766,6 +10797,14 @@ msgstr "サインイン"
 #: apps/remix/app/routes/_unauthenticated+/signin.tsx
 msgid "Sign in to your account"
 msgstr "アカウントにサインイン"
+
+#: apps/remix/app/components/general/role-profile-select.tsx
+msgid "Sign only"
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/admin+/users.$id.tsx
+msgid "Sign only is a restricted profile: it may only sign the documents which have been shared with it, and cannot be combined with the User or Admin roles."
+msgstr ""
 
 #: apps/remix/app/components/general/app-nav-mobile.tsx
 #: apps/remix/app/components/general/org-menu-switcher.tsx
@@ -10850,6 +10889,7 @@ msgid "Signatures Collected"
 msgstr "収集された署名数"
 
 #: apps/remix/app/components/general/document/document-page-view-recipients.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_internal+/[__htmltopdf]+/certificate.tsx
 #: packages/lib/server-only/pdf/render-certificate.ts
 #: packages/ui/components/document/document-read-only-fields.tsx
@@ -11416,6 +11456,7 @@ msgstr "サポート"
 
 #: apps/remix/app/components/dialogs/organisation-email-create-dialog.tsx
 #: apps/remix/app/components/dialogs/organisation-email-update-dialog.tsx
+#: apps/remix/app/components/general/org-menu-switcher.tsx
 #: apps/remix/app/components/general/org-menu-switcher.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.support.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.support.tsx
@@ -12441,6 +12482,14 @@ msgstr "一部のフィールドの表示に問題がありました。フィー
 #: packages/ui/components/document/document-global-auth-action-select.tsx
 msgid "These can be overriden by setting the authentication requirements directly on each recipient in the next step. Multiple methods can be selected."
 msgstr "これは、次のステップで各受信者に対して直接設定される認証要件によって上書きされます。複数の方法を選択できます。"
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "These documents are assigned to you, but it is not your turn to sign yet."
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "These documents are waiting for your signature."
+msgstr ""
 
 #: packages/ui/components/recipient/recipient-action-auth-select.tsx
 msgid "These will override any global settings. Multiple methods can be selected."
@@ -13672,6 +13721,7 @@ msgstr "パスキーで認証する"
 msgid "Used by claims"
 msgstr "クレームで使用中"
 
+#: apps/remix/app/components/general/role-profile-select.tsx
 #: apps/remix/app/components/tables/admin-document-logs-table.tsx
 #: apps/remix/app/components/tables/document-logs-table.tsx
 #: apps/remix/app/components/tables/internal-audit-log-table.tsx
@@ -14000,6 +14050,7 @@ msgid "Visibility"
 msgstr "公開範囲"
 
 #: apps/remix/app/components/general/stack-avatars-with-tooltip.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 msgid "Waiting"
 msgstr "保留中"
 
@@ -15075,9 +15126,21 @@ msgstr "あなたが開始したドキュメント {0} は、{recipientActionVer
 msgid "You have no API tokens yet. Your tokens will be shown here once you create them."
 msgstr ""
 
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "You have no documents waiting for their turn."
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "You have no documents waiting for your signature."
+msgstr ""
+
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/settings.webhooks._index.tsx
 msgid "You have no webhooks yet. Your webhooks will be shown here once you create them."
 msgstr "Webhook はまだありません。作成するとここに表示されます。"
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "You have not signed any documents yet."
+msgstr ""
 
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/templates._index.tsx
 msgid "You have not yet created any templates. To create a template please upload one."

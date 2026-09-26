@@ -1587,6 +1587,7 @@ msgstr "Informazioni aggiuntive sul marchio da mostrare in fondo alle email"
 
 #: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
 #: apps/remix/app/components/dialogs/admin-organisation-member-update-dialog.tsx
+#: apps/remix/app/components/general/role-profile-select.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/_layout.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/organisations.$id.tsx
 #: packages/lib/constants/organisations-translations.ts
@@ -4925,6 +4926,14 @@ msgstr "Documenti visualizzati"
 msgid "Documents where all recipients have signed but the document has not been sealed. Documents stuck for more than 6 hours are no longer retried by the sweep job."
 msgstr "Documenti in cui tutti i destinatari hanno firmato ma il documento non è stato sigillato. I documenti bloccati per più di 6 ore non vengono più ritentati dal processo di sweep."
 
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "Documents which have been shared with you to sign."
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "Documents you have already signed or rejected."
+msgstr ""
+
 #: apps/remix/app/routes/_authenticated+/admin+/organisation-stats._index.tsx
 msgid "Documents, emails and api values may not be accurate since they record the amount of times the action was attempted. Meaning these values may go over the actual quota, get rejected, and will still be recorded."
 msgstr "I valori relativi a documenti, email e API potrebbero non essere accurati, poiché registrano il numero di volte in cui è stata tentata l’azione. Ciò significa che questi valori possono superare la quota effettiva, essere respinti e risultare comunque registrati."
@@ -6327,6 +6336,11 @@ msgstr "Francese"
 msgid "From"
 msgstr "Da"
 
+#. placeholder {0}: document.senderName
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "From {0}"
+msgstr ""
+
 #: apps/remix/app/components/forms/email-transport-form.tsx
 msgid "From address"
 msgstr "Indirizzo mittente"
@@ -6620,6 +6634,10 @@ msgstr ""
 #: apps/remix/app/components/general/admin-license-card.tsx
 msgid "Hide license key"
 msgstr "Nascondi chiave di licenza"
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "History"
+msgstr ""
 
 #: apps/remix/app/components/dialogs/folder-move-dialog.tsx
 #: apps/remix/app/components/general/folder/folder-grid.tsx
@@ -7761,6 +7779,14 @@ msgstr "Possono essere selezionati più metodi di accesso."
 msgid "My Folder"
 msgstr "La Mia Cartella"
 
+#: apps/remix/app/components/general/app-nav-desktop.tsx
+#: apps/remix/app/components/general/app-nav-mobile.tsx
+#: apps/remix/app/components/general/org-menu-switcher.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "My signatures"
+msgstr ""
+
 #: apps/remix/app/components/tables/admin-document-logs-table.tsx
 #: apps/remix/app/components/tables/document-logs-table.tsx
 #: apps/remix/app/components/tables/internal-audit-log-table.tsx
@@ -8111,7 +8137,7 @@ msgstr "Nessun modello diretto valido trovato"
 msgid "No valid recipients found"
 msgstr "Nessun destinatario valido trovato"
 
-#: apps/remix/app/components/general/multiselect-role-combobox.tsx
+#: apps/remix/app/components/general/role-profile-select.tsx
 #: packages/ui/primitives/combobox.tsx
 #: packages/ui/primitives/multi-select-combobox.tsx
 msgid "No value found."
@@ -8722,6 +8748,7 @@ msgstr "Documento PDF"
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains._index.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains._index.tsx
 #: apps/remix/app/routes/_authenticated+/admin+/email-domains.$id.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.settings.members.tsx
 #: packages/lib/constants/document.ts
 #: packages/ui/components/document/document-read-only-fields.tsx
@@ -9152,6 +9179,7 @@ msgid "Processing document"
 msgstr "Elaborazione del documento"
 
 #: apps/remix/app/components/general/app-command-menu.tsx
+#: apps/remix/app/routes/_authenticated+/admin+/users.$id.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/profile.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/profile.tsx
 #: apps/remix/app/routes/_profile+/_layout.tsx
@@ -9574,6 +9602,7 @@ msgstr "Rifiuta Documento"
 #: apps/remix/app/components/general/document/document-status.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-header.tsx
 #: apps/remix/app/components/general/stack-avatars-with-tooltip.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_internal+/[__htmltopdf]+/certificate.tsx
 #: packages/lib/constants/document.ts
 #: packages/lib/server-only/pdf/render-certificate.ts
@@ -10028,7 +10057,6 @@ msgid "Role"
 msgstr "Ruolo"
 
 #: apps/remix/app/components/tables/admin-dashboard-users-table.tsx
-#: apps/remix/app/routes/_authenticated+/admin+/users.$id.tsx
 msgid "Roles"
 msgstr "Ruoli"
 
@@ -10185,6 +10213,7 @@ msgid "Secret"
 msgstr "Segreto"
 
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx
+#: apps/remix/app/components/general/org-menu-switcher.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/security._index.tsx
 #: apps/remix/app/routes/_authenticated+/settings+/security._index.tsx
 #: packages/lib/utils/settings-nav.ts
@@ -10614,6 +10643,7 @@ msgstr "Imposta la tua password per Documenso"
 #: apps/remix/app/components/general/app-command-menu.tsx
 #: apps/remix/app/components/general/app-nav-mobile.tsx
 #: apps/remix/app/components/general/app-nav-mobile.tsx
+#: apps/remix/app/components/general/app-nav-mobile.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor-settings-dialog.tsx
 #: apps/remix/app/components/general/envelope-editor/envelope-editor.tsx
 #: apps/remix/app/components/general/folder/folder-card.tsx
@@ -10700,6 +10730,7 @@ msgstr "Mostra utilizzo con quote"
 #: apps/remix/app/components/tables/documents-table-action-button.tsx
 #: apps/remix/app/components/tables/documents-table-action-dropdown.tsx
 #: apps/remix/app/components/tables/inbox-table.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_profile+/p.$url.tsx
 msgid "Sign"
 msgstr "Firma"
@@ -10766,6 +10797,14 @@ msgstr "Accedi"
 #: apps/remix/app/routes/_unauthenticated+/signin.tsx
 msgid "Sign in to your account"
 msgstr "Accedi al tuo account"
+
+#: apps/remix/app/components/general/role-profile-select.tsx
+msgid "Sign only"
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/admin+/users.$id.tsx
+msgid "Sign only is a restricted profile: it may only sign the documents which have been shared with it, and cannot be combined with the User or Admin roles."
+msgstr ""
 
 #: apps/remix/app/components/general/app-nav-mobile.tsx
 #: apps/remix/app/components/general/org-menu-switcher.tsx
@@ -10850,6 +10889,7 @@ msgid "Signatures Collected"
 msgstr "Firme raccolte"
 
 #: apps/remix/app/components/general/document/document-page-view-recipients.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 #: apps/remix/app/routes/_internal+/[__htmltopdf]+/certificate.tsx
 #: packages/lib/server-only/pdf/render-certificate.ts
 #: packages/ui/components/document/document-read-only-fields.tsx
@@ -11416,6 +11456,7 @@ msgstr "supporto"
 
 #: apps/remix/app/components/dialogs/organisation-email-create-dialog.tsx
 #: apps/remix/app/components/dialogs/organisation-email-update-dialog.tsx
+#: apps/remix/app/components/general/org-menu-switcher.tsx
 #: apps/remix/app/components/general/org-menu-switcher.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.support.tsx
 #: apps/remix/app/routes/_authenticated+/o.$orgUrl.support.tsx
@@ -12441,6 +12482,14 @@ msgstr "Si è verificato un problema nel rendering di alcuni campi, si prega di 
 #: packages/ui/components/document/document-global-auth-action-select.tsx
 msgid "These can be overriden by setting the authentication requirements directly on each recipient in the next step. Multiple methods can be selected."
 msgstr "Queste possono essere sovrascritte impostando i requisiti di autenticazione direttamente su ciascun destinatario nel passaggio successivo. È possibile selezionare più metodi."
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "These documents are assigned to you, but it is not your turn to sign yet."
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "These documents are waiting for your signature."
+msgstr ""
 
 #: packages/ui/components/recipient/recipient-action-auth-select.tsx
 msgid "These will override any global settings. Multiple methods can be selected."
@@ -13672,6 +13721,7 @@ msgstr "Usa la tua chiave di accesso per l'autenticazione"
 msgid "Used by claims"
 msgstr "Utilizzato dai claim"
 
+#: apps/remix/app/components/general/role-profile-select.tsx
 #: apps/remix/app/components/tables/admin-document-logs-table.tsx
 #: apps/remix/app/components/tables/document-logs-table.tsx
 #: apps/remix/app/components/tables/internal-audit-log-table.tsx
@@ -14000,6 +14050,7 @@ msgid "Visibility"
 msgstr "Visibilità"
 
 #: apps/remix/app/components/general/stack-avatars-with-tooltip.tsx
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
 msgid "Waiting"
 msgstr "In attesa"
 
@@ -15075,9 +15126,21 @@ msgstr "Hai avviato il documento {0} che richiede che tu lo {recipientActionVerb
 msgid "You have no API tokens yet. Your tokens will be shown here once you create them."
 msgstr ""
 
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "You have no documents waiting for their turn."
+msgstr ""
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "You have no documents waiting for your signature."
+msgstr ""
+
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/settings.webhooks._index.tsx
 msgid "You have no webhooks yet. Your webhooks will be shown here once you create them."
 msgstr "Non hai ancora webhook. I tuoi webhook verranno visualizzati qui una volta creati."
+
+#: apps/remix/app/routes/_authenticated+/mis-firmas.tsx
+msgid "You have not signed any documents yet."
+msgstr ""
 
 #: apps/remix/app/routes/_authenticated+/t.$teamUrl+/templates._index.tsx
 msgid "You have not yet created any templates. To create a template please upload one."
