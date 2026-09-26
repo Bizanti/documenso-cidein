@@ -2,9 +2,12 @@ import { extractCookieFromHeaders } from '@documenso/auth/server/lib/utils/cooki
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
 import { PREFERRED_TEAM_URL_COOKIE } from '@documenso/lib/constants/cookies';
 import { getTeams } from '@documenso/lib/server-only/team/get-teams';
+import { isSignOnly } from '@documenso/lib/utils/is-sign-only';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
 import { ZTeamUrlSchema } from '@documenso/trpc/server/team-router/schema';
 import { redirect } from 'react-router';
+
+import { SIGN_ONLY_HOME } from '~/utils/sign-only-routes';
 
 import type { Route } from './+types/_index';
 
@@ -12,6 +15,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await getOptionalSession(request);
 
   if (session.isAuthenticated) {
+    // A sign only account has no team to land on, its inbox is the whole application.
+    if (isSignOnly(session.user)) {
+      throw redirect(SIGN_ONLY_HOME);
+    }
+
     const teamUrlCookie = extractCookieFromHeaders(PREFERRED_TEAM_URL_COOKIE, request.headers);
 
     // const referrer = request.headers.get('referer');

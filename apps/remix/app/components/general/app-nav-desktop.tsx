@@ -1,4 +1,5 @@
 import { useSession } from '@documenso/lib/client-only/providers/session';
+import { isSignOnly } from '@documenso/lib/utils/is-sign-only';
 import { cn } from '@documenso/ui/lib/utils';
 import { Button } from '@documenso/ui/primitives/button';
 import { msg } from '@lingui/core/macro';
@@ -9,8 +10,8 @@ import { Search } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-
 import { useOptionalCurrentTeam } from '~/providers/team';
+import { SIGN_ONLY_HOME } from '~/utils/sign-only-routes';
 
 export type AppNavDesktopProps = HTMLAttributes<HTMLDivElement> & {
   setIsCommandMenuOpen: (value: boolean) => void;
@@ -18,7 +19,7 @@ export type AppNavDesktopProps = HTMLAttributes<HTMLDivElement> & {
 
 export const AppNavDesktop = ({ className, setIsCommandMenuOpen, ...props }: AppNavDesktopProps) => {
   const { _ } = useLingui();
-  const { organisations } = useSession();
+  const { user, organisations } = useSession();
 
   const { pathname } = useLocation();
 
@@ -34,6 +35,16 @@ export const AppNavDesktop = ({ className, setIsCommandMenuOpen, ...props }: App
   }, []);
 
   const menuNavigationLinks = useMemo(() => {
+    // A sign only account has no team area, so its inbox is the entire navigation.
+    if (isSignOnly(user)) {
+      return [
+        {
+          href: SIGN_ONLY_HOME,
+          label: msg`My signatures`,
+        },
+      ];
+    }
+
     let teamUrl = currentTeam?.url || null;
 
     if (!teamUrl && organisations.length === 1 && organisations[0].teams.length === 1) {
@@ -54,7 +65,7 @@ export const AppNavDesktop = ({ className, setIsCommandMenuOpen, ...props }: App
         label: msg`Templates`,
       },
     ];
-  }, [currentTeam, organisations]);
+  }, [currentTeam, organisations, user]);
 
   return (
     <div className={cn('ml-8 hidden flex-1 items-center gap-x-12 md:flex md:justify-between', className)} {...props}>

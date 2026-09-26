@@ -1,11 +1,12 @@
 import { authClient } from '@documenso/auth/client';
 import { useOptionalCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
 import { useSession } from '@documenso/lib/client-only/providers/session';
-import { IS_BILLING_ENABLED } from '@documenso/lib/constants/app';
+import { IS_BILLING_ENABLED, SUPPORT_EMAIL } from '@documenso/lib/constants/app';
 import { EXTENDED_ORGANISATION_MEMBER_ROLE_MAP } from '@documenso/lib/constants/organisations-translations';
 import { EXTENDED_TEAM_MEMBER_ROLE_MAP } from '@documenso/lib/constants/teams-translations';
 import { formatAvatarUrl } from '@documenso/lib/utils/avatars';
 import { isAdmin } from '@documenso/lib/utils/is-admin';
+import { isSignOnly } from '@documenso/lib/utils/is-sign-only';
 import { canExecuteOrganisationAction } from '@documenso/lib/utils/organisations';
 import { extractInitials } from '@documenso/lib/utils/recipient-formatter';
 import { canExecuteTeamAction } from '@documenso/lib/utils/teams';
@@ -26,8 +27,8 @@ import { Trans } from '@lingui/react/macro';
 import { Building2Icon, ChevronsUpDown, Plus, Settings2Icon, SettingsIcon, UsersIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-
 import { useOptionalCurrentTeam } from '~/providers/team';
+import { SIGN_ONLY_HOME } from '~/utils/sign-only-routes';
 
 export const OrgMenuSwitcher = () => {
   const { _ } = useLingui();
@@ -41,6 +42,10 @@ export const OrgMenuSwitcher = () => {
   const [hoveredOrgId, setHoveredOrgId] = useState<string | null>(null);
 
   const isUserAdmin = isAdmin(user);
+
+  // A sign only account has no organisation or team to switch between or to create, so it
+  // only gets the entries which belong to its own profile.
+  const isSignOnlyUser = isSignOnly(user);
 
   const isPathOrgUrl = (orgUrl: string) => {
     if (!pathname || !pathname.startsWith(`/o/`)) {
@@ -130,126 +135,133 @@ export const OrgMenuSwitcher = () => {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
-        className={cn('z-[60] ml-6 flex w-full divide-x divide-border p-0 md:ml-0 md:min-w-[40rem]')}
+        className={cn('z-[60] ml-6 flex w-full divide-x divide-border p-0 md:ml-0', {
+          'md:min-w-[40rem]': !isSignOnlyUser,
+          'md:min-w-[16rem]': isSignOnlyUser,
+        })}
         align="end"
         forceMount
       >
-        <div className="flex h-[400px] w-full divide-x">
+        <div className={cn('flex w-full divide-x', { 'h-[400px]': !isSignOnlyUser })}>
           {/* Organisations column */}
-          <div className="flex w-full flex-col md:w-1/3">
-            <div className="flex h-12 items-center border-b p-2">
-              <h3 className="flex items-center px-2 font-medium text-muted-foreground text-sm">
-                <Building2Icon className="mr-2 h-3.5 w-3.5" />
-                <Trans>Organisations</Trans>
-              </h3>
-            </div>
-            <div className="flex-1 space-y-1 overflow-y-auto p-1.5">
-              {organisations.map((org) => (
-                <div className="group relative" key={org.id} onMouseEnter={() => setHoveredOrgId(org.id)}>
-                  <DropdownMenuItem
-                    className={cn(
-                      'w-full px-4 py-2 text-muted-foreground',
-                      org.id === currentOrganisation?.id && !hoveredOrgId && 'bg-accent',
-                      org.id === hoveredOrgId && 'bg-accent',
-                    )}
-                    asChild
-                  >
-                    <Link to={`/o/${org.url}`} className="flex items-center space-x-2 pr-8">
-                      <span
-                        className={cn('min-w-0 flex-1 truncate', {
-                          'font-semibold': org.id === selectedOrg?.id,
-                        })}
-                      >
-                        {org.name}
-                      </span>
-                    </Link>
-                  </DropdownMenuItem>
-
-                  {canExecuteOrganisationAction('MANAGE_ORGANISATION', org.currentOrganisationRole) && (
-                    <div className="absolute top-0 right-0 bottom-0 flex items-center justify-center">
-                      <Link
-                        to={`/o/${org.url}/settings/general`}
-                        className="mr-2 rounded-sm border p-1 text-muted-foreground transition-opacity duration-200 group-hover:opacity-100 md:opacity-0"
-                      >
-                        <Settings2Icon className="h-3.5 w-3.5" />
+          {!isSignOnlyUser && (
+            <div className="flex w-full flex-col md:w-1/3">
+              <div className="flex h-12 items-center border-b p-2">
+                <h3 className="flex items-center px-2 font-medium text-muted-foreground text-sm">
+                  <Building2Icon className="mr-2 h-3.5 w-3.5" />
+                  <Trans>Organisations</Trans>
+                </h3>
+              </div>
+              <div className="flex-1 space-y-1 overflow-y-auto p-1.5">
+                {organisations.map((org) => (
+                  <div className="group relative" key={org.id} onMouseEnter={() => setHoveredOrgId(org.id)}>
+                    <DropdownMenuItem
+                      className={cn(
+                        'w-full px-4 py-2 text-muted-foreground',
+                        org.id === currentOrganisation?.id && !hoveredOrgId && 'bg-accent',
+                        org.id === hoveredOrgId && 'bg-accent',
+                      )}
+                      asChild
+                    >
+                      <Link to={`/o/${org.url}`} className="flex items-center space-x-2 pr-8">
+                        <span
+                          className={cn('min-w-0 flex-1 truncate', {
+                            'font-semibold': org.id === selectedOrg?.id,
+                          })}
+                        >
+                          {org.name}
+                        </span>
                       </Link>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    </DropdownMenuItem>
 
-              <Button variant="ghost" className="w-full justify-start" asChild>
-                <Link to="/settings/organisations?action=add-organisation">
-                  <Plus className="mr-2 h-4 w-4" />
-                  <Trans>Create Organisation</Trans>
-                </Link>
-              </Button>
+                    {canExecuteOrganisationAction('MANAGE_ORGANISATION', org.currentOrganisationRole) && (
+                      <div className="absolute top-0 right-0 bottom-0 flex items-center justify-center">
+                        <Link
+                          to={`/o/${org.url}/settings/general`}
+                          className="mr-2 rounded-sm border p-1 text-muted-foreground transition-opacity duration-200 group-hover:opacity-100 md:opacity-0"
+                        >
+                          <Settings2Icon className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <Button variant="ghost" className="w-full justify-start" asChild>
+                  <Link to="/settings/organisations?action=add-organisation">
+                    <Plus className="mr-2 h-4 w-4" />
+                    <Trans>Create Organisation</Trans>
+                  </Link>
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Teams column */}
-          <div className="hidden w-1/3 flex-col md:flex">
-            <div className="flex h-12 items-center border-b p-2">
-              <h3 className="flex items-center px-2 font-medium text-muted-foreground text-sm">
-                <UsersIcon className="mr-2 h-3.5 w-3.5" />
-                <Trans>Teams</Trans>
-              </h3>
-            </div>
-            <div className="flex-1 space-y-1 overflow-y-auto p-1.5">
-              <AnimateGenericFadeInOut key={displayedOrg ? 'displayed-org' : 'no-org'}>
-                {hoveredOrg ? (
-                  hoveredOrg.teams.map((team) => (
-                    <div className="group relative" key={team.id}>
-                      <DropdownMenuItem
-                        className={cn(
-                          'w-full px-4 py-2 text-muted-foreground',
-                          team.id === currentTeam?.id && 'bg-accent',
-                        )}
-                        asChild
-                      >
-                        <Link to={`/t/${team.url}`} className="flex items-center space-x-2 pr-8">
-                          <span
-                            className={cn('min-w-0 flex-1 truncate', {
-                              'font-semibold': team.id === currentTeam?.id,
-                            })}
-                          >
-                            {team.name}
-                          </span>
-                        </Link>
-                      </DropdownMenuItem>
-
-                      {canExecuteTeamAction('MANAGE_TEAM', team.currentTeamRole) && (
-                        <div className="absolute top-0 right-0 bottom-0 flex items-center justify-center">
-                          <Link
-                            to={`/t/${team.url}/settings/general`}
-                            className="mr-2 rounded-sm border p-1 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                          >
-                            <Settings2Icon className="h-3.5 w-3.5" />
+          {!isSignOnlyUser && (
+            <div className="hidden w-1/3 flex-col md:flex">
+              <div className="flex h-12 items-center border-b p-2">
+                <h3 className="flex items-center px-2 font-medium text-muted-foreground text-sm">
+                  <UsersIcon className="mr-2 h-3.5 w-3.5" />
+                  <Trans>Teams</Trans>
+                </h3>
+              </div>
+              <div className="flex-1 space-y-1 overflow-y-auto p-1.5">
+                <AnimateGenericFadeInOut key={displayedOrg ? 'displayed-org' : 'no-org'}>
+                  {hoveredOrg ? (
+                    hoveredOrg.teams.map((team) => (
+                      <div className="group relative" key={team.id}>
+                        <DropdownMenuItem
+                          className={cn(
+                            'w-full px-4 py-2 text-muted-foreground',
+                            team.id === currentTeam?.id && 'bg-accent',
+                          )}
+                          asChild
+                        >
+                          <Link to={`/t/${team.url}`} className="flex items-center space-x-2 pr-8">
+                            <span
+                              className={cn('min-w-0 flex-1 truncate', {
+                                'font-semibold': team.id === currentTeam?.id,
+                              })}
+                            >
+                              {team.name}
+                            </span>
                           </Link>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="my-12 flex items-center justify-center px-2 text-center text-muted-foreground text-sm">
-                    <Trans>Select an organisation to view teams</Trans>
-                  </div>
-                )}
+                        </DropdownMenuItem>
 
-                {displayedOrg && (
-                  <Button variant="ghost" className="w-full justify-start" asChild>
-                    <Link to={`/o/${displayedOrg.url}/settings/teams?action=add-team`}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      <Trans>Create Team</Trans>
-                    </Link>
-                  </Button>
-                )}
-              </AnimateGenericFadeInOut>
+                        {canExecuteTeamAction('MANAGE_TEAM', team.currentTeamRole) && (
+                          <div className="absolute top-0 right-0 bottom-0 flex items-center justify-center">
+                            <Link
+                              to={`/t/${team.url}/settings/general`}
+                              className="mr-2 rounded-sm border p-1 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                            >
+                              <Settings2Icon className="h-3.5 w-3.5" />
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="my-12 flex items-center justify-center px-2 text-center text-muted-foreground text-sm">
+                      <Trans>Select an organisation to view teams</Trans>
+                    </div>
+                  )}
+
+                  {displayedOrg && (
+                    <Button variant="ghost" className="w-full justify-start" asChild>
+                      <Link to={`/o/${displayedOrg.url}/settings/teams?action=add-team`}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        <Trans>Create Team</Trans>
+                      </Link>
+                    </Button>
+                  )}
+                </AnimateGenericFadeInOut>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Settings column */}
-          <div className="hidden w-1/3 flex-col md:flex">
+          <div className={cn('flex-col', isSignOnlyUser ? 'flex w-full' : 'hidden w-1/3 md:flex')}>
             <div className="flex h-12 items-center border-b p-2">
               <h3 className="flex items-center px-2 font-medium text-muted-foreground text-sm">
                 <SettingsIcon className="mr-2 h-3.5 w-3.5" />
@@ -257,7 +269,7 @@ export const OrgMenuSwitcher = () => {
               </h3>
             </div>
             <div className="flex-1 overflow-y-auto p-1.5">
-              {isUserAdmin && (
+              {isUserAdmin && !isSignOnlyUser && (
                 <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
                   <Link to="/admin">
                     <Trans>Admin panel</Trans>
@@ -266,24 +278,26 @@ export const OrgMenuSwitcher = () => {
               )}
 
               <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
-                <Link to="/inbox">
-                  <Trans>Inbox</Trans>
+                <Link to={isSignOnlyUser ? SIGN_ONLY_HOME : '/inbox'} data-testid="menu-switcher-inbox">
+                  {isSignOnlyUser ? <Trans>My signatures</Trans> : <Trans>Inbox</Trans>}
                 </Link>
               </DropdownMenuItem>
 
-              <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
-                <Link
-                  to={
-                    canAccessOrganisationSettings
-                      ? `/o/${currentOrganisation?.url}/settings/general`
-                      : canAccessTeamSettings
-                        ? `/t/${currentTeam?.url}/settings/general`
-                        : '/settings/profile'
-                  }
-                >
-                  <Trans>Settings</Trans>
-                </Link>
-              </DropdownMenuItem>
+              {!isSignOnlyUser && (
+                <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
+                  <Link
+                    to={
+                      canAccessOrganisationSettings
+                        ? `/o/${currentOrganisation?.url}/settings/general`
+                        : canAccessTeamSettings
+                          ? `/t/${currentTeam?.url}/settings/general`
+                          : '/settings/profile'
+                    }
+                  >
+                    <Trans>Settings</Trans>
+                  </Link>
+                </DropdownMenuItem>
+              )}
 
               <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
                 <Link to="/settings/profile">
@@ -291,7 +305,15 @@ export const OrgMenuSwitcher = () => {
                 </Link>
               </DropdownMenuItem>
 
-              {IS_BILLING_ENABLED() && (
+              {isSignOnlyUser && (
+                <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
+                  <Link to="/settings/security">
+                    <Trans>Security</Trans>
+                  </Link>
+                </DropdownMenuItem>
+              )}
+
+              {IS_BILLING_ENABLED() && !isSignOnlyUser && (
                 <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
                   <Link to="/settings/billing">
                     <Trans>Billing</Trans>
@@ -306,16 +328,24 @@ export const OrgMenuSwitcher = () => {
                 <Trans>Language</Trans>
               </DropdownMenuItem>
 
-              {currentOrganisation && (
+              {(currentOrganisation || isSignOnlyUser) && (
                 <DropdownMenuItem className="px-4 py-2 text-muted-foreground" asChild>
-                  <Link
-                    to={{
-                      pathname: `/o/${currentOrganisation.url}/support`,
-                      search: currentTeam ? `?team=${currentTeam.id}` : '',
-                    }}
-                  >
-                    <Trans>Support</Trans>
-                  </Link>
+                  {currentOrganisation ? (
+                    <Link
+                      to={{
+                        pathname: `/o/${currentOrganisation.url}/support`,
+                        search: currentTeam ? `?team=${currentTeam.id}` : '',
+                      }}
+                    >
+                      <Trans>Support</Trans>
+                    </Link>
+                  ) : (
+                    // Without an organisation there is no support page to reach, so the
+                    // entry falls back to the support mailbox instead of a dead link.
+                    <a href={`mailto:${SUPPORT_EMAIL}`}>
+                      <Trans>Support</Trans>
+                    </a>
+                  )}
                 </DropdownMenuItem>
               )}
 

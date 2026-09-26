@@ -1,7 +1,13 @@
 import { useOptionalCurrentOrganisation } from '@documenso/lib/client-only/providers/organisation';
 import { useSession } from '@documenso/lib/client-only/providers/session';
+import { isSignOnly } from '@documenso/lib/utils/is-sign-only';
 import { canExecuteOrganisationAction } from '@documenso/lib/utils/organisations';
-import { getSettingsNavGroups, type SettingsNavGroup, type SettingsNavItem } from '@documenso/lib/utils/settings-nav';
+import {
+  getSettingsNavGroups,
+  type SettingsNavGroup,
+  type SettingsNavGroups,
+  type SettingsNavItem,
+} from '@documenso/lib/utils/settings-nav';
 import { canExecuteTeamAction } from '@documenso/lib/utils/teams';
 import { Button } from '@documenso/ui/primitives/button';
 import type { MessageDescriptor } from '@lingui/core';
@@ -28,6 +34,28 @@ export type UnifiedSettingsLayoutProps = {
    * account scope, where the URL carries no team.
    */
   preferredTeamUrl?: string | null;
+};
+
+/**
+ * The account settings a sign only account may reach.
+ *
+ * The organisation and team scopes are dropped entirely, and the account scope keeps only
+ * the pages which belong to the user themselves.
+ */
+const SIGN_ONLY_ACCOUNT_SETTING_KEYS = ['profile', 'security'];
+
+/**
+ * Drop every settings group a sign only account is not allowed to use.
+ */
+const getSignOnlySettingsGroups = (groups: SettingsNavGroups): SettingsNavGroups => {
+  return {
+    organisation: null,
+    team: null,
+    account: {
+      ...groups.account,
+      items: groups.account.items.filter((item) => SIGN_ONLY_ACCOUNT_SETTING_KEYS.includes(item.key)),
+    },
+  };
 };
 
 /**
@@ -68,7 +96,7 @@ const findActiveCrumbs = (group: SettingsNavGroup | null, pathname: string): Mes
 
 export const UnifiedSettingsLayout = ({ activeScope, preferredTeamUrl = null }: UnifiedSettingsLayoutProps) => {
   const { _ } = useLingui();
-  const { organisations } = useSession();
+  const { user, organisations } = useSession();
   const { pathname } = useLocation();
 
   const currentOrganisation = useOptionalCurrentOrganisation();
@@ -127,6 +155,8 @@ export const UnifiedSettingsLayout = ({ activeScope, preferredTeamUrl = null }: 
     ),
   });
 
+  const visibleGroups = isSignOnly(user) ? getSignOnlySettingsGroups(groups) : groups;
+
   const canManageOrg =
     organisation !== null && canExecuteOrganisationAction('MANAGE_ORGANISATION', organisation.currentOrganisationRole);
 
@@ -174,7 +204,11 @@ export const UnifiedSettingsLayout = ({ activeScope, preferredTeamUrl = null }: 
     .exhaustive();
 
   const activeGroup =
-    activeScope === 'account' ? groups.account : activeScope === 'organisation' ? groups.organisation : groups.team;
+    activeScope === 'account'
+      ? visibleGroups.account
+      : activeScope === 'organisation'
+        ? visibleGroups.organisation
+        : visibleGroups.team;
 
   const crumbs = findActiveCrumbs(activeGroup, pathname).map((label) => _(label));
 
@@ -184,14 +218,14 @@ export const UnifiedSettingsLayout = ({ activeScope, preferredTeamUrl = null }: 
         <div className="flex h-full flex-col">
           <div className="hidden md:block">
             <UnifiedSettingsSidebar
-              groups={groups}
+              groups={visibleGroups}
               currentOrgUrl={organisation?.url ?? null}
               currentTeamUrl={teamForSidebar?.url ?? null}
             />
           </div>
           <div className="md:hidden">
             <UnifiedSettingsSidebarMobile
-              groups={groups}
+              groups={visibleGroups}
               activeScope={activeScope}
               currentOrgUrl={organisation?.url ?? null}
               currentTeamUrl={teamForSidebar?.url ?? null}
