@@ -15,6 +15,10 @@ import type { AnyZodObject } from 'zod';
 
 import { dataTransformer } from '../utils/data-transformer';
 import type { TrpcContext } from './context';
+import {
+  assertRestrictedAccountCanReadById,
+  isRestrictedAccountAllowedToReadProcedurePath,
+} from './restricted-account-read-policy';
 
 // Can't import type from trpc-to-openapi because it breaks build, not sure why.
 export type TrpcRouteMeta = {
@@ -77,21 +81,29 @@ const t = initTRPC
  */
 
 /**
- * Refuse a write performed by a restricted account.
+ * Refuse the procedures a restricted account has no business reaching.
  *
  * A sign only account is limited to signing the documents shared with it, so
- * every write it could reach is closed here: the decision is taken per request,
- * for mutations only, and the roles are read fresh from the database rather than
- * reused from the session or the API token the request came with. That is what
- * makes a role change take effect on the very next write instead of surviving
- * inside a long lived session.
+ * both sides of the surface it could otherwise reach are closed here:
  *
- * Reads are untouched, and so are the signer flows: `procedure` and
- * `maybeAuthenticatedProcedure` are not covered, because signing a field,
- * completing with a recipient token and accepting an invitation are things a
- * restricted account must keep doing.
+ * - every write outside the self service prefixes, so a restricted account
+ *   cannot manage documents, teams, organisations, tokens or webhooks;
+ * - every read outside the signer allowlist in
+ *   `restricted-account-read-policy.ts`, so the team and organisation surfaces
+ *   cannot be listed or opened either. A 403 is returned rather than an empty
+ *   list, because "you may not read this" must not be mistaken for "there is
+ *   nothing to read".
+ *
+ * The decision is taken per request and the roles are read fresh from the
+ * database rather than reused from the session or the API token the request came
+ * with. That is what makes a role change take effect on the very next request
+ * instead of surviving inside a long lived session.
+ *
+ * The signer flows are untouched: `procedure` and `maybeAuthenticatedProcedure`
+ * are not covered, because signing a field, completing with a recipient token
+ * and accepting an invitation are things a restricted account must keep doing.
  */
-const assertRestrictedAccountCannotWrite = async ({
+const assertRestrictedAccountCannotReachProcedure = async ({
   userId,
   type,
   path,
@@ -100,11 +112,17 @@ const assertRestrictedAccountCannotWrite = async ({
   type: ProcedureType;
   path: string;
 }) => {
-  if (type !== 'mutation' || !isDocumentManagementProcedurePath(path)) {
+  if (type === 'mutation') {
+    if (isDocumentManagementProcedurePath(path)) {
+      await assertCanManageDocumentsById({ userId });
+    }
+
     return;
   }
 
-  await assertCanManageDocumentsById({ userId });
+  if (type === 'query' && !isRestrictedAccountAllowedToReadProcedurePath(path)) {
+    await assertRestrictedAccountCanReadById({ userId });
+  }
 };
 
 export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, meta, type }) => {
@@ -138,9 +156,9 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
     // present in the DB (e.g. before `disableUser` runs) so we enforce here.
     assertUserNotDisabled(apiToken.user);
 
-    // An API token acts as the account it belongs to, so the write closure
-    // applies to the API surface exactly as it does to the session one.
-    await assertRestrictedAccountCannotWrite({ userId: apiToken.user.id, type, path });
+    // An API token acts as the account it belongs to, so the closure applies to
+    // the API surface exactly as it does to the session one.
+    await assertRestrictedAccountCannotReachProcedure({ userId: apiToken.user.id, type, path });
 
     const trpcApiV2Logger = ctx.logger.child({
       ...baseLogAttributes,
@@ -191,9 +209,10 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
   // authenticated TRPC call here.
   assertUserNotDisabled(ctx.user);
 
-  // Close every write for a restricted account, reading its roles fresh from the
-  // database instead of trusting the ones the session was created with.
-  await assertRestrictedAccountCannotWrite({ userId: ctx.user.id, type, path });
+  // Close every write and every non signer read for a restricted account, reading
+  // its roles fresh from the database instead of trusting the ones the session was
+  // created with.
+  await assertRestrictedAccountCannotReachProcedure({ userId: ctx.user.id, type, path });
 
   // Recreate the logger with a sub request ID to differentiate between batched
   // requests, as well as identifying attributes so every subsequent log line
