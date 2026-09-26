@@ -1,3 +1,4 @@
+import { useOptionalSession } from '@documenso/lib/client-only/providers/session';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
 import { Badge } from '@documenso/ui/primitives/badge';
@@ -16,6 +17,7 @@ import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
+import { isRestrictedAccountViewer } from '~/components/dialogs/envelope-download-policy';
 import { useEmbedSigningContext } from '~/components/embed/embed-signing-context';
 import { BrandingLogo } from '~/components/general/branding-logo';
 
@@ -95,6 +97,13 @@ const MobileDropdownMenu = () => {
   const { allowDocumentRejection } = useEmbedSigningContext() || {};
   const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);
 
+  const { sessionData } = useOptionalSession();
+
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail. The policy
+  // of a token viewer does not carry their account, so the session decides here.
+  const isDownloadBlockedForAccount = isRestrictedAccountViewer(sessionData?.user);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -104,7 +113,7 @@ const MobileDropdownMenu = () => {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end">
-        {recipientCapabilities.canDownload && (
+        {recipientCapabilities.canDownload && !isDownloadBlockedForAccount && (
           <EnvelopeDownloadDialog
             envelopeId={envelope.id}
             envelopeStatus={envelope.status}

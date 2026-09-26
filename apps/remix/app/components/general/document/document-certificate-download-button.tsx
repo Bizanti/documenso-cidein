@@ -11,6 +11,8 @@ import { Trans } from '@lingui/react/macro';
 import type { DocumentStatus } from '@prisma/client';
 import { DownloadIcon } from 'lucide-react';
 
+import { isAccountDownloadBlocked, useEnvelopeDownloadPolicy } from '~/components/dialogs/envelope-download-policy';
+
 export type DocumentCertificateDownloadButtonProps = {
   className?: string;
   envelopeId: string;
@@ -25,7 +27,15 @@ export const DocumentCertificateDownloadButton = ({
   const { toast } = useToast();
   const { _ } = useLingui();
 
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({ envelopeId });
+
   const { mutateAsync: downloadCertificate, isPending } = trpc.document.downloadCertificate.useMutation();
+
+  // The certificate is an export of the document, so a restricted account is not
+  // offered it: the server refuses the export as well.
+  if (isAccountDownloadBlocked(downloadPolicy)) {
+    return null;
+  }
 
   const onDownloadCertificatesClick = async () => {
     try {

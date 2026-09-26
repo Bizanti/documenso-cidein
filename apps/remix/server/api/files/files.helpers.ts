@@ -287,6 +287,9 @@ export const getFileTokenRecipient = (token: string, envelopeId: string) => {
     },
     select: {
       role: true,
+      // The download routes resolve the account behind this address, so that a
+      // restricted account receives no copy whichever way it reaches the document.
+      email: true,
     },
   });
 };

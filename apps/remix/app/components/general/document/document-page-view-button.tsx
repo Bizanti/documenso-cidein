@@ -13,7 +13,11 @@ import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
-import { useEnvelopeDownloadPolicy } from '~/components/dialogs/envelope-download-policy';
+import {
+  isAccountDownloadBlocked,
+  isRestrictedAccountViewer,
+  useEnvelopeDownloadPolicy,
+} from '~/components/dialogs/envelope-download-policy';
 
 export type DocumentPageViewButtonProps = {
   envelope: TEnvelope;
@@ -38,8 +42,15 @@ export const DocumentPageViewButton = ({ envelope }: DocumentPageViewButtonProps
     enabled: isComplete && canDownload,
   });
 
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail.
+  const isDownloadBlockedForAccount = isAccountDownloadBlocked(downloadPolicy) || isRestrictedAccountViewer(user);
+
   const isDownloadLocked =
-    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
+    !isDownloadBlockedForAccount &&
+    downloadPolicy !== undefined &&
+    !downloadPolicy.canDownloadSigned &&
+    !downloadPolicy.canDownloadOriginal;
 
   const documentsPath = formatDocumentsPath(envelope.team.url);
   const formatPath = `${documentsPath}/${envelope.id}/edit`;
@@ -50,6 +61,7 @@ export const DocumentPageViewButton = ({ envelope }: DocumentPageViewButtonProps
     isComplete,
     isSigned,
     canDownload,
+    isDownloadBlockedForAccount,
     internalVersion: envelope.internalVersion,
   })
     .with({ isRecipient: true, isPending: true, isSigned: false }, () => (
@@ -85,6 +97,7 @@ export const DocumentPageViewButton = ({ envelope }: DocumentPageViewButtonProps
       </Button>
     ))
     .with({ isComplete: true, canDownload: false }, () => null)
+    .with({ isComplete: true, isDownloadBlockedForAccount: true }, () => null)
     .with({ isComplete: true }, () =>
       isDownloadLocked ? (
         <Button className="w-full" disabled title={_(msg`The download window for this document has expired.`)}>

@@ -51,7 +51,11 @@ import { useCurrentTeam } from '~/providers/team';
 
 import { DocumentResendSignedDialog } from '../dialogs/document-resend-signed-dialog';
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
-import { useEnvelopeDownloadPolicy } from '../dialogs/envelope-download-policy';
+import {
+  isAccountDownloadBlocked,
+  isRestrictedAccountViewer,
+  useEnvelopeDownloadPolicy,
+} from '../dialogs/envelope-download-policy';
 import { EnvelopeRenameDialog } from '../dialogs/envelope-rename-dialog';
 
 export type DocumentsTableActionDropdownProps = {
@@ -110,8 +114,15 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
     enabled: isComplete && canDownloadDocument,
   });
 
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail.
+  const isDownloadBlockedForAccount = isAccountDownloadBlocked(downloadPolicy) || isRestrictedAccountViewer(user);
+
   const isDownloadLocked =
-    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
+    !isDownloadBlockedForAccount &&
+    downloadPolicy !== undefined &&
+    !downloadPolicy.canDownloadSigned &&
+    !downloadPolicy.canDownloadOriginal;
 
   const { canTitleBeChanged } = getEnvelopeItemPermissions(
     {
@@ -182,6 +193,7 @@ export const DocumentsTableActionDropdown = ({ row, onMoveDocument }: DocumentsT
         )}
 
         {canDownloadDocument &&
+          !isDownloadBlockedForAccount &&
           (isDownloadLocked ? (
             <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
               <div className="flex flex-col">

@@ -1,4 +1,5 @@
 import { useCurrentEnvelopeRender } from '@documenso/lib/client-only/providers/envelope-render-provider';
+import { useOptionalSession } from '@documenso/lib/client-only/providers/session';
 import { PDF_VIEWER_ERROR_MESSAGES } from '@documenso/lib/constants/pdf-viewer-i18n';
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { getRecipientRoleCapabilities } from '@documenso/lib/utils/recipients';
@@ -21,6 +22,7 @@ import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
+import { isRestrictedAccountViewer } from '~/components/dialogs/envelope-download-policy';
 import { SignFieldCheckboxDialog } from '~/components/dialogs/sign-field-checkbox-dialog';
 import { SignFieldDropdownDialog } from '~/components/dialogs/sign-field-dropdown-dialog';
 import { SignFieldEmailDialog } from '~/components/dialogs/sign-field-email-dialog';
@@ -67,6 +69,13 @@ export const DocumentSigningPageViewV2 = () => {
   const { t } = useLingui();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);
+
+  const { sessionData } = useOptionalSession();
+
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail. The policy
+  // of a token viewer does not carry their account, so the session decides here.
+  const isDownloadBlockedForAccount = isRestrictedAccountViewer(sessionData?.user);
 
   /**
    * The total remaining fields remaining for the current recipient or selected assistant recipient.
@@ -182,7 +191,7 @@ export const DocumentSigningPageViewV2 = () => {
                   }
                 />
 
-                {recipientCapabilities.canDownload && (
+                {recipientCapabilities.canDownload && !isDownloadBlockedForAccount && (
                   <EnvelopeDownloadDialog
                     envelopeId={envelope.id}
                     envelopeStatus={envelope.status}

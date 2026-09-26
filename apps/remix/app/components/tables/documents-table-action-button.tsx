@@ -15,7 +15,11 @@ import { match } from 'ts-pattern';
 import { useCurrentTeam } from '~/providers/team';
 
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
-import { useEnvelopeDownloadPolicy } from '../dialogs/envelope-download-policy';
+import {
+  isAccountDownloadBlocked,
+  isRestrictedAccountViewer,
+  useEnvelopeDownloadPolicy,
+} from '../dialogs/envelope-download-policy';
 
 export type DocumentsTableActionButtonProps = {
   row: TDocumentRow;
@@ -49,8 +53,15 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
     enabled: isComplete && canDownload,
   });
 
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail.
+  const isDownloadBlockedForAccount = isAccountDownloadBlocked(downloadPolicy) || isRestrictedAccountViewer(user);
+
   const isDownloadLocked =
-    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
+    !isDownloadBlockedForAccount &&
+    downloadPolicy !== undefined &&
+    !downloadPolicy.canDownloadSigned &&
+    !downloadPolicy.canDownloadOriginal;
 
   const documentsPath = formatDocumentsPath(team.url);
   const formatPath = `${documentsPath}/${row.envelopeId}/edit`;
@@ -68,6 +79,7 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
     isComplete,
     isSigned,
     canDownload,
+    isDownloadBlockedForAccount,
     isCurrentTeamDocument,
     internalVersion: row.internalVersion,
   })
@@ -111,6 +123,7 @@ export const DocumentsTableActionButton = ({ row }: DocumentsTableActionButtonPr
       </Button>
     ))
     .with({ isComplete: true, canDownload: false }, () => null)
+    .with({ isComplete: true, isDownloadBlockedForAccount: true }, () => null)
     .with({ isComplete: true }, () =>
       isDownloadLocked ? (
         <Button className="w-32" disabled title={_(msg`The download window for this document has expired.`)}>

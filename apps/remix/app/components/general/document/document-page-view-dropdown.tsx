@@ -35,7 +35,11 @@ import { Link, useNavigate } from 'react-router';
 import { DocumentResendSignedDialog } from '~/components/dialogs/document-resend-signed-dialog';
 import { EnvelopeDeleteDialog } from '~/components/dialogs/envelope-delete-dialog';
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
-import { useEnvelopeDownloadPolicy } from '~/components/dialogs/envelope-download-policy';
+import {
+  isAccountDownloadBlocked,
+  isRestrictedAccountViewer,
+  useEnvelopeDownloadPolicy,
+} from '~/components/dialogs/envelope-download-policy';
 import { EnvelopeDuplicateDialog } from '~/components/dialogs/envelope-duplicate-dialog';
 import { EnvelopeRedistributeDialog } from '~/components/dialogs/envelope-redistribute-dialog';
 import { EnvelopeRenameDialog } from '~/components/dialogs/envelope-rename-dialog';
@@ -87,8 +91,15 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
     enabled: isComplete && canDownloadDocument,
   });
 
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail.
+  const isDownloadBlockedForAccount = isAccountDownloadBlocked(downloadPolicy) || isRestrictedAccountViewer(user);
+
   const isDownloadLocked =
-    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
+    !isDownloadBlockedForAccount &&
+    downloadPolicy !== undefined &&
+    !downloadPolicy.canDownloadSigned &&
+    !downloadPolicy.canDownloadOriginal;
 
   const { canTitleBeChanged } = getEnvelopeItemPermissions(envelope, []);
 
@@ -122,6 +133,7 @@ export const DocumentPageViewDropdown = ({ envelope }: DocumentPageViewDropdownP
         )}
 
         {canDownloadDocument &&
+          !isDownloadBlockedForAccount &&
           (isDownloadLocked ? (
             <DropdownMenuItem disabled onSelect={(e) => e.preventDefault()}>
               <div className="flex flex-col">

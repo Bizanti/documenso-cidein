@@ -1,8 +1,11 @@
 import { getOptionalSession } from '@documenso/auth/server/lib/utils/get-session';
 import { APP_DOCUMENT_UPLOAD_SIZE_LIMIT } from '@documenso/lib/constants/app';
 import { AppError } from '@documenso/lib/errors/app-error';
+import { resolveAccountForAuthorization } from '@documenso/lib/server-only/auth/resolve-account-for-authorization';
 import {
+  canDownloadDocument,
   DOWNLOAD_DENIAL_MESSAGE,
+  DOWNLOAD_DENIAL_REASON,
   getEnvelopeItemDownloadDenial,
   getRecipientDownloadPolicy,
   getUserDownloadPolicy,
@@ -431,6 +434,23 @@ export const filesRoute = new Hono<HonoEnv>()
 
       if (recipient && isRoleRestrictedFromCompletedFile(recipient.role)) {
         return c.json({ error: 'Controlled signers are not permitted to download this document' }, 403);
+      }
+
+      // A token hands the document to the recipient's address, so the account
+      // behind it decides as well: a restricted account receives no copy, however
+      // it reaches the document. An address with no account is an external
+      // recipient, ruled by its recipient role alone, and a lookup which cannot be
+      // completed throws rather than handing out the file.
+      const recipientAccount = recipient ? await resolveAccountForAuthorization(recipient.email) : null;
+
+      if (!canDownloadDocument({ account: recipientAccount ? { roles: recipientAccount.roles } : null })) {
+        return c.json(
+          {
+            error: DOWNLOAD_DENIAL_MESSAGE[DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN],
+            code: DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN,
+          },
+          403,
+        );
       }
 
       const downloadPolicy = await getRecipientDownloadPolicy({
