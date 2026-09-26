@@ -9,6 +9,8 @@ import { useLingui } from '@lingui/react';
 import { Trans } from '@lingui/react/macro';
 import { DownloadIcon } from 'lucide-react';
 
+import { isAccountDownloadBlocked, useEnvelopeDownloadPolicy } from '~/components/dialogs/envelope-download-policy';
+
 export type DocumentAuditLogDownloadButtonProps = {
   className?: string;
   envelopeId: string;
@@ -18,7 +20,15 @@ export const DocumentAuditLogDownloadButton = ({ className, envelopeId }: Docume
   const { toast } = useToast();
   const { _ } = useLingui();
 
+  const { downloadPolicy } = useEnvelopeDownloadPolicy({ envelopeId });
+
   const { mutateAsync: downloadAuditLogs, isPending } = trpc.document.auditLog.download.useMutation();
+
+  // The audit log is an export of the document, so a restricted account is not
+  // offered it: the server refuses the export as well.
+  if (isAccountDownloadBlocked(downloadPolicy)) {
+    return null;
+  }
 
   const onDownloadAuditLogsClick = async () => {
     try {

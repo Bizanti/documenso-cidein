@@ -25,7 +25,12 @@ import { DocumentStatus } from '~/components/general/document/document-status';
 import { useOptionalCurrentTeam } from '~/providers/team';
 
 import { EnvelopeDownloadDialog } from '../dialogs/envelope-download-dialog';
-import { getEnvelopeDownloadPolicyRequests, useEnvelopeDownloadPolicy } from '../dialogs/envelope-download-policy';
+import {
+  getEnvelopeDownloadPolicyRequests,
+  isAccountDownloadBlocked,
+  isRestrictedAccountViewer,
+  useEnvelopeDownloadPolicy,
+} from '../dialogs/envelope-download-policy';
 import { EnvelopeDownloadPolicyProvider } from '../dialogs/envelope-download-policy-provider';
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
 
@@ -207,8 +212,15 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
     enabled: isComplete && canDownload,
   });
 
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail.
+  const isDownloadBlockedForAccount = isAccountDownloadBlocked(downloadPolicy) || isRestrictedAccountViewer(user);
+
   const isDownloadLocked =
-    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
+    !isDownloadBlockedForAccount &&
+    downloadPolicy !== undefined &&
+    !downloadPolicy.canDownloadSigned &&
+    !downloadPolicy.canDownloadOriginal;
 
   if (!recipient) {
     return null;
@@ -224,6 +236,7 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
     isComplete,
     isSigned,
     canDownload,
+    isDownloadBlockedForAccount,
     internalVersion: row.internalVersion,
   })
     .with({ isPending: true, isSigned: false }, () => (
@@ -258,6 +271,7 @@ export const InboxTableActionButton = ({ row }: InboxTableActionButtonProps) => 
       </Button>
     ))
     .with({ isComplete: true, canDownload: false }, () => null)
+    .with({ isComplete: true, isDownloadBlockedForAccount: true }, () => null)
     .with({ isComplete: true }, () =>
       isDownloadLocked ? (
         <Button className="w-32" disabled title={_(msg`The download window for this document has expired.`)}>

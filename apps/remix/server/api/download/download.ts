@@ -1,9 +1,13 @@
 import { PDF_SIZE_A4_72PPI } from '@documenso/lib/constants/pdf';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { getAccountRolesById } from '@documenso/lib/server-only/auth/document-authorization';
 import {
+  canDownloadDocument,
   DOWNLOAD_DENIAL_MESSAGE,
+  DOWNLOAD_DENIAL_REASON,
   getEnvelopeItemDownloadDenial,
   getUserDownloadPolicy,
+  type TDownloadDenialReason,
 } from '@documenso/lib/server-only/document/download-policy';
 import { getEnvelopeById, getEnvelopeWhereInput } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { generateAuditLogPdf } from '@documenso/lib/server-only/pdf/generate-audit-log-pdf';
@@ -51,6 +55,23 @@ const resolveApiToken = async (authorizationHeader: string | undefined) => {
   }
 
   return apiToken;
+};
+
+/**
+ * The denial an export route answers for the account behind an API token, or
+ * `null` when the account may export.
+ *
+ * The audit log and the signing certificate are exports of the document, so a
+ * restricted account receives them under the same denial as the document
+ * download routes. The roles are read fresh from the database on every request,
+ * and a missing account is a failure to authorize rather than an implicit allow.
+ */
+const getAccountDownloadDenial = async (userId: number): Promise<TDownloadDenialReason | null> => {
+  const account = await getAccountRolesById({ userId });
+
+  const roles = account?.roles ?? [];
+
+  return canDownloadDocument({ account: { roles } }) ? null : DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN;
 };
 
 export const downloadRoute = new Hono<HonoEnv>()
@@ -196,6 +217,12 @@ export const downloadRoute = new Hono<HonoEnv>()
           envelopeId,
         });
 
+        const accountDenial = await getAccountDownloadDenial(apiToken.user.id);
+
+        if (accountDenial) {
+          return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[accountDenial], code: accountDenial }, 403);
+        }
+
         const envelope = await getEnvelopeById({
           id: {
             type: 'envelopeId',
@@ -269,6 +296,12 @@ export const downloadRoute = new Hono<HonoEnv>()
           apiTokenId: apiToken.id,
           envelopeId,
         });
+
+        const accountDenial = await getAccountDownloadDenial(apiToken.user.id);
+
+        if (accountDenial) {
+          return c.json({ error: DOWNLOAD_DENIAL_MESSAGE[accountDenial], code: accountDenial }, 403);
+        }
 
         const { envelopeWhereInput } = await getEnvelopeWhereInput({
           id: {

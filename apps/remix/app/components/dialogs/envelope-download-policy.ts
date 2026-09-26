@@ -1,6 +1,8 @@
+import { isSignOnly } from '@documenso/lib/utils/is-sign-only';
 import { findRecipientByEmail } from '@documenso/lib/utils/recipients';
 import { trpc } from '@documenso/trpc/react';
 import type { TEnvelopeDownloadPolicy } from '@documenso/trpc/server/document-router/get-envelope-download-policies.types';
+import type { User } from '@prisma/client';
 import { createContext, useContext, useMemo } from 'react';
 
 /**
@@ -42,6 +44,36 @@ export type EnvelopeDownloadPoliciesContextValue = {
 };
 
 const getEnvelopeDownloadPolicyKey = (envelopeId: string, token?: string) => `${envelopeId}|${token ?? ''}`;
+
+/**
+ * The denial reason the server answers when the account behind the request is
+ * itself restricted, as opposed to a restriction of the window or of one
+ * version.
+ *
+ * Mirrors `DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN`; the module which
+ * defines it is server only, so the value is spelled out here.
+ */
+const ACCOUNT_DOWNLOAD_FORBIDDEN = 'ACCOUNT_DOWNLOAD_FORBIDDEN';
+
+/**
+ * Whether the policy closes downloads for the account itself, which is the one
+ * denial that leaves nothing to offer: the window and the original version close
+ * a version at a time, while a restricted account is refused by every download
+ * route.
+ */
+export const isAccountDownloadBlocked = (downloadPolicy?: TEnvelopeDownloadPolicy): boolean =>
+  downloadPolicy?.downloadDenialReason === ACCOUNT_DOWNLOAD_FORBIDDEN;
+
+/**
+ * Whether the signed in viewer is a restricted account.
+ *
+ * The policy endpoint resolves an envelope the viewer reaches through a
+ * recipient token with recipient permissions only, so the account of a token
+ * viewer is not part of that policy. The server decides the download either way;
+ * this only keeps the control out of a restricted account's sight.
+ */
+export const isRestrictedAccountViewer = (user: Pick<User, 'roles'> | null | undefined): boolean =>
+  user ? isSignOnly(user) : false;
 
 /**
  * The page level batch: the policies it resolved plus what it covered, so the

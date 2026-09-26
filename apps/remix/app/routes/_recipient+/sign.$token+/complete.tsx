@@ -25,7 +25,11 @@ import { Link } from 'react-router';
 import { match } from 'ts-pattern';
 
 import { EnvelopeDownloadDialog } from '~/components/dialogs/envelope-download-dialog';
-import { useEnvelopeDownloadPolicy } from '~/components/dialogs/envelope-download-policy';
+import {
+  isAccountDownloadBlocked,
+  isRestrictedAccountViewer,
+  useEnvelopeDownloadPolicy,
+} from '~/components/dialogs/envelope-download-policy';
 import { ClaimAccount } from '~/components/general/claim-account';
 import { DocumentSigningAuthPageView } from '~/components/general/document-signing/document-signing-auth-page';
 import { RecipientBranding } from '~/components/general/recipient-branding';
@@ -162,8 +166,15 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
   const recipientCapabilities = getRecipientRoleCapabilities(recipient.role);
   const isControlledSigner = recipient.role === RecipientRole.CONTROLLED_SIGNER;
 
+  // A restricted account is not offered a download control: the server refuses
+  // every download route for it, so the action would only ever fail.
+  const isDownloadBlockedForAccount = isAccountDownloadBlocked(downloadPolicy) || isRestrictedAccountViewer(user);
+
   const isDownloadLocked =
-    downloadPolicy !== undefined && !downloadPolicy.canDownloadSigned && !downloadPolicy.canDownloadOriginal;
+    !isDownloadBlockedForAccount &&
+    downloadPolicy !== undefined &&
+    !downloadPolicy.canDownloadSigned &&
+    !downloadPolicy.canDownloadOriginal;
 
   return (
     <>
@@ -284,6 +295,7 @@ export default function CompletedSigningPage({ loaderData }: Route.ComponentProp
 
             <div className="mt-8 flex w-full max-w-xs flex-col items-stretch gap-4 md:w-auto md:max-w-none md:flex-row md:items-center">
               {recipientCapabilities.canDownload &&
+                !isDownloadBlockedForAccount &&
                 isDocumentCompleted(document) &&
                 (isDownloadLocked ? (
                   <Button
