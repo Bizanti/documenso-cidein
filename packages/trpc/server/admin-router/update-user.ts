@@ -1,5 +1,5 @@
 import { invalidateUserSessions } from '@documenso/auth/server/lib/session/session';
-import { getRolesAfterPromotion, validateRoleCombination } from '@documenso/lib/constants/roles';
+import { validateRoleCombination } from '@documenso/lib/constants/roles';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
 import { updateUser } from '@documenso/lib/server-only/admin/update-user';
 import { countActiveRecipientAssignments } from '@documenso/lib/server-only/audit/recipient-assignments';
@@ -48,18 +48,20 @@ export const updateUserRoute = adminProcedure
      * Roles are only assigned by a platform administrator: this route runs
      * behind `adminProcedure` and is the only write path of `User.roles`.
      *
+     * The administrator submits a complete profile - the panel only offers the
+     * SIGN_ONLY, USER and USER+ADMIN combinations - so the requested roles are
+     * stored as validated. Promoting a restricted account is an explicit
+     * decision: it happens when the administrator selects the user profile, and
+     * never as a side effect of editing another field of the account.
+     *
      * Only a valid profile combination can be stored, so a request carrying
      * SIGN_ONLY together with USER or ADMIN is rejected instead of writing an
      * account which holds the restricted profile and a permission at once.
+     *
+     * `roles === undefined` means the profile was left out of the edit, so the
+     * stored roles are kept instead of being rewritten.
      */
-    const requestedRoles = roles === undefined ? undefined : validateRoleCombination(roles);
-
-    /**
-     * Promoting a restricted account replaces the sign only profile with the
-     * user profile instead of accumulating it, and never grants the admin role
-     * implicitly.
-     */
-    const nextRoles = requestedRoles === undefined ? undefined : getRolesAfterPromotion(requestedRoles);
+    const nextRoles = roles === undefined ? undefined : validateRoleCombination(roles);
 
     // Emails are stored lowercase, and the review of the live signing
     // assignments below matches on the stored address.
