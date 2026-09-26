@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { assertCanManageDocumentsById } from '@documenso/lib/server-only/auth/document-authorization';
 import type { SetAvatarImageOptions } from '@documenso/lib/server-only/profile/set-avatar-image';
 import { setAvatarImage } from '@documenso/lib/server-only/profile/set-avatar-image';
 import { deleteUser } from '@documenso/lib/server-only/user/delete-user';
@@ -73,6 +74,15 @@ export const profileRouter = router({
         type: 'organisation',
         organisationId,
       };
+    }
+
+    // `profile.*` is self service for a restricted account, so the shared write
+    // closure lets this route through: the avatar of the account itself belongs
+    // to the account. The avatar of a team or an organisation does not, because
+    // it is shared with every member, so that target is closed here even when
+    // the account kept the membership role which would otherwise allow it.
+    if (target.type !== 'user') {
+      await assertCanManageDocumentsById({ userId: ctx.user.id });
     }
 
     return await setAvatarImage({
