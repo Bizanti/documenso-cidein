@@ -22,10 +22,15 @@ import { renderCustomEmailTemplate } from '../../../utils/render-custom-email-te
 import { renderEmailWithI18N } from '../../../utils/render-email-with-i18n';
 import { formatDocumentsPath } from '../../../utils/teams';
 import type { JobRunIO } from '../../client/_internal/job';
+import { waitForE2ECompletionEmailPause } from './e2e-completion-email-pause';
 import type { TSendDocumentCompletedEmailsJobDefinition } from './send-document-completed-emails';
 
 export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmailsJobDefinition; io: JobRunIO }) => {
   const { envelopeId, requestMetadata } = payload;
+
+  // Test-only: hold the send until the e2e scenario of this envelope releases
+  // it. A no-op unless the e2e variable is set, see the module.
+  await waitForE2ECompletionEmailPause(envelopeId);
 
   const envelope = await prisma.envelope.findUnique({
     where: unsafeBuildEnvelopeIdQuery({ type: 'envelopeId', id: envelopeId }, EnvelopeType.DOCUMENT),
