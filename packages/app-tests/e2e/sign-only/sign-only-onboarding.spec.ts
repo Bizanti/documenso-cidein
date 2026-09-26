@@ -119,11 +119,19 @@ test('A3: an invited account signs up, accepts the invitation and stays restrict
 
   await page.goto(`/organisation/invite/${invite.token}`);
 
-  await expect(page.getByRole('heading')).toContainText('Organisation invitation');
+  // Match the heading by role and accept either spelling: the view is written
+  // with the British "Organisation" while the English catalog renders the US
+  // "Organization", so a literal assertion on the source string never matched
+  // the screen.
+  await expect(page.getByRole('heading', { name: /Organi[sz]ation invitation/ })).toBeVisible();
+
+  // And this is the accepting branch: the invited account already exists, so the
+  // page offers Accept instead of the "create an account" step.
+  await expect(page.getByRole('button', { name: 'Accept' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Accept' }).click();
 
-  await expect(page.getByRole('heading')).toContainText('Invitation accepted!');
+  await expect(page.getByRole('heading', { name: 'Invitation accepted!' })).toBeVisible();
 
   await page.getByRole('link', { name: 'Continue' }).click();
 

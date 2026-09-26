@@ -65,6 +65,10 @@ test('G1: an administrator keeps creating teams, uploading documents and reachin
       teamName: 'G1 Team',
       teamUrl: 'g1-team',
       organisationId: organisation.id,
+      // Required by `ZCreateTeamRequestSchema`: the schema has no default, so a
+      // call without it is rejected by the input parser and the team is never
+      // created.
+      inheritMembers: true,
     },
   });
 

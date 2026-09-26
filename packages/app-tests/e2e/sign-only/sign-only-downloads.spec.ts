@@ -14,10 +14,11 @@
  * - E4 (covered): rendering is not downloading. A restricted account can still
  *   open the viewer of the document it has to sign: the item render route
  *   answers 200 while the download route answers 403.
- * - E5 (deferred): an email queued before the restriction and sent after applies
- *   the policy in force at send time. It is job coverage
- *   (`send-document-completed-emails`), with unit tests in M26; the suite cannot
- *   control when a queued email is sent.
+ * - E5 (covered): the real completion email a restricted signer receives is
+ *   delivered without the document. Read from the test mail server the suite
+ *   already uses (`inbucket`), so the "ni adjunto" half of E2 is asserted
+ *   against a message that really went out, not only against the policy the
+ *   senders call.
  * - G2 (covered): an addressee without an account is ruled by its recipient role
  *   alone, so an external signer may still receive and download the document.
  */
@@ -30,8 +31,9 @@ import { prisma } from '@documenso/prisma';
 import { seedCompletedDocument, seedPendingDocument } from '@documenso/prisma/seed/documents';
 import { seedTestEmail, seedUser } from '@documenso/prisma/seed/users';
 import { expect, type Page, test } from '@playwright/test';
-import { RecipientRole, TeamMemberRole } from '@prisma/client';
+import { DocumentStatus, RecipientRole, TeamMemberRole } from '@prisma/client';
 
+import { apiSeedPendingDocument } from '../fixtures/api-seeds';
 import { apiSignin } from '../fixtures/authentication';
 import {
   createSignOnlyApiToken,
@@ -42,10 +44,64 @@ import {
   seedSignOnlyMemberContext,
   seedSignOnlyUser,
 } from '../fixtures/sign-only';
+import { signSignaturePad } from '../fixtures/signature';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe.configure({ mode: 'parallel' });
+
+/**
+ * Inbucket (the test mail server `npm run dx:up` starts) exposes its HTTP API on
+ * port 9000, the endpoint `e2e/emails-branding.spec.ts` and
+ * `e2e/documents/resend-signed-document.spec.ts` already read.
+ */
+const INBUCKET_URL = 'http://localhost:9000';
+
+type InbucketMessage = {
+  id: string;
+};
+
+type InbucketMessagePart = {
+  filename?: string;
+  'content-type'?: string;
+};
+
+/** The messages sitting in a recipient's mailbox, newest first. */
+const getMailboxMessages = async (email: string) => {
+  const mailbox = email.split('@')[0];
+
+  const response = await fetch(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}`);
+
+  if (!response.ok) {
+    return [];
+  }
+
+  return (await response.json()) as InbucketMessage[];
+};
+
+/** The MIME parts a message carries, as the test mail server parses them. */
+const getMessageParts = async (email: string, messageId: string) => {
+  const mailbox = email.split('@')[0];
+
+  const response = await fetch(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}/${messageId}`);
+
+  expect(response.ok, `could not read message ${messageId}: ${await response.text()}`).toBe(true);
+
+  const details = (await response.json()) as { attachments?: InbucketMessagePart[] };
+
+  return details.attachments ?? [];
+};
+
+/** The raw SMTP source of a message, where an attached PDF shows up as a part. */
+const getMessageSource = async (email: string, messageId: string) => {
+  const mailbox = email.split('@')[0];
+
+  const response = await fetch(`${INBUCKET_URL}/api/v1/mailbox/${mailbox}/${messageId}/source`);
+
+  expect(response.ok, `could not read the source of message ${messageId}`).toBe(true);
+
+  return await response.text();
+};
 
 const getSessionDownloadUrl = ({
   envelopeId,
@@ -251,7 +307,8 @@ test('E2: a signer with a restricted account downloads nothing', async ({ page, 
 
   // Attachment: the send-time rule refuses to attach the document to an email
   // addressed to the restricted account. Asserted against the policy entry point
-  // the senders call, since the suite has no email transport harness.
+  // the senders call; E5 asserts the same rule on the message that really goes
+  // out.
   expect(await canAttachDocumentPdfToAddressee({ email: signOnlyUser.email })).toBe(false);
 });
 
@@ -347,6 +404,103 @@ test('E4: a restricted account can still open the viewer of the document it sign
 
   expect(viewerResponse.status(), await viewerResponse.text()).toBe(200);
   expect(viewerResponse.headers()['content-type']).toContain('pdf');
+});
+
+test('E5: the completion email a restricted signer receives travels without the document', async ({
+  page,
+  request,
+}) => {
+  const signOnlyUser = await seedSignOnlyUser({ name: 'E5 Signer' });
+
+  const { envelope, distributeResult } = await apiSeedPendingDocument(request, {
+    title: '[TEST] E5 restricted email',
+    recipients: [{ email: signOnlyUser.email, name: 'E5 Signer', role: 'SIGNER' }],
+    fieldsPerRecipient: [[{ type: 'SIGNATURE', page: 1, positionX: 10, positionY: 10, width: 15, height: 5 }]],
+  });
+
+  const recipient = distributeResult.recipients[0];
+
+  if (!recipient) {
+    throw new Error('The distribution did not hand out a signing token for the restricted signer');
+  }
+
+  // The restricted account signs for real: that is what completes the document
+  // and makes the completion email go out through the transport.
+  await apiSignin({ page, email: signOnlyUser.email, redirectPath: '/' });
+
+  await page.goto(`/sign/${recipient.token}`);
+  await signSignaturePad(page);
+  await page.getByRole('button', { name: 'Complete' }).click();
+  await page.waitForTimeout(1000);
+  await page.getByRole('button', { name: 'Sign' }).click({ force: true });
+
+  await page.waitForURL(`/sign/${recipient.token}/complete`);
+
+  await expect
+    .poll(
+      async () => {
+        const completed = await prisma.envelope.findFirstOrThrow({
+          where: {
+            id: envelope.id,
+          },
+        });
+
+        return completed.status;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(DocumentStatus.COMPLETED);
+
+  // The message goes out from a background job, so wait until the send of the
+  // completion email addressed to the restricted account is on the audit log
+  // before reading the mailbox: the assertions below must run against that
+  // message, not against an earlier one.
+  await expect
+    .poll(
+      async () => {
+        const sentEmails = await prisma.documentAuditLog.findMany({
+          where: {
+            envelopeId: envelope.id,
+            type: 'EMAIL_SENT',
+            data: {
+              path: ['emailType'],
+              equals: 'DOCUMENT_COMPLETED',
+            },
+          },
+          select: {
+            data: true,
+          },
+        });
+
+        return sentEmails.some(
+          (email) => (email.data as { recipientEmail?: string }).recipientEmail === signOnlyUser.email,
+        );
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+
+  // Nothing in this mailbox may carry the document: the signing request does not
+  // attach it either, and the completion email has to withhold it because the
+  // addressee cannot download it. Asserted against the parsed parts and the raw
+  // source, so an inline logo is allowed but a PDF part is not.
+  await expect(async () => {
+    const messages = await getMailboxMessages(signOnlyUser.email);
+
+    expect(messages.length).toBeGreaterThan(0);
+
+    for (const message of messages) {
+      const parts = await getMessageParts(signOnlyUser.email, message.id);
+
+      const documentPart = parts.find((part) => part['content-type'] === 'application/pdf');
+
+      expect(documentPart, `message ${message.id} carried the document as ${documentPart?.filename}`).toBeUndefined();
+
+      const source = await getMessageSource(signOnlyUser.email, message.id);
+
+      expect(source, `message ${message.id} attached a PDF part`).not.toContain('application/pdf');
+    }
+  }).toPass({ timeout: 30_000, intervals: [1000, 2000, 5000] });
 });
 
 test('G2: an external recipient without an account keeps its role policy', async ({ request }) => {
