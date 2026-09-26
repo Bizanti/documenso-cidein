@@ -122,6 +122,20 @@ export const authenticatedMiddleware = <
           } as const;
         }
 
+        // An authorization denial is a 403, not a 401: the caller presented a
+        // valid token, its account is simply not allowed to do this. Every
+        // restricted (sign only) write and download answers through here, so the
+        // REST surface reports the same status the tRPC one does.
+        if (err.code === AppErrorCode.FORBIDDEN) {
+          return {
+            status: 403,
+            body: { message: err.message },
+          } as const;
+        }
+
+        // Anything else keeps the existing contract: a missing or invalid
+        // token, a disabled account, or a handler error, answered with the
+        // error's message.
         message = err.message;
       }
 
