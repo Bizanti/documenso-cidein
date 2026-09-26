@@ -27,6 +27,7 @@ import {
   expectTrpcQueryRefused,
   postTrpcMutation,
   RESTRICTED_ACCOUNT_MESSAGE,
+  RESTRICTED_ACCOUNT_READ_MESSAGE,
   SIGN_ONLY_HOME,
   seedSignOnlyMemberContext,
 } from '../fixtures/sign-only';
@@ -46,6 +47,7 @@ const expectApiReadRefused = async (response: APIResponse, title: string) => {
 
   expect(response.status(), `expected 403 but got ${response.status()}: ${body}`).toBe(403);
   expect(body).toContain('FORBIDDEN');
+  expect(body).toContain(RESTRICTED_ACCOUNT_READ_MESSAGE);
   expect(body).not.toContain(title);
 };
 

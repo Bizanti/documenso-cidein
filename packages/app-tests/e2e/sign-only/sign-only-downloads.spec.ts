@@ -242,6 +242,13 @@ test('E2: a signer with a restricted account downloads nothing', async ({ page, 
   await expectBothVersionsHidden({ page, envelopeId: document.id });
   await expectBothVersionsHidden({ page, envelopeId: document.id, token: recipient.token });
 
+  // UI: the signer's own completion page offers no download control either.
+  await page.goto(`/sign/${recipient.token}/complete`);
+
+  await expect(page.getByRole('heading', { name: 'Document Signed' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Download locked', exact: true })).toHaveCount(0);
+
   // Attachment: the send-time rule refuses to attach the document to an email
   // addressed to the restricted account. Asserted against the policy entry point
   // the senders call, since the suite has no email transport harness.

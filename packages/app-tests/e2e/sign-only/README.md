@@ -18,11 +18,11 @@ pueden cubrir hoy quedan enumerados con el motivo exacto.
 | C1  | Crear documento bloqueado: UI (área de equipo inalcanzable y sin control de subida en la bandeja) y API directa (`POST /api/v2-beta/envelope/create` y `POST /api/v1/documents/:id/send` → 403 con el mensaje de cuenta restringida) | `sign-only-restrictions.spec.ts`            |
 | C2  | Carpetas, plantillas y duplicado bloqueados por API (`folder/create`, `envelope/create` tipo TEMPLATE, `envelope/duplicate` → 403) y UI (`/documents/folders`, `/templates` → bandeja); nada se crea | `sign-only-restrictions.spec.ts`            |
 | C3  | Crear equipo u organización bloqueado: UI (`/settings/organisations`, `/o/*/settings/teams` → bandeja) y tRPC `team.create` / `organisation.create` → 403 | `sign-only-restrictions.spec.ts`            |
-| D1  | Miembro de un equipo compartido no ve los documentos del equipo: el área de equipo redirige, la bandeja sólo lista lo dirigido a la cuenta y las lecturas del equipo se rechazan (tRPC `document.find` / `envelope.get` y `GET /api/v2/envelope[/{id}]` → 403, sin filtrar título) | `sign-only-isolation.spec.ts`               |
+| D1  | Miembro de un equipo compartido no ve los documentos del equipo: el área de equipo redirige, la bandeja sólo lista lo dirigido a la cuenta y las lecturas del equipo se rechazan (`document.find` / `envelope.get` por sesión y `GET /api/v2/envelope[/{id}]` → 403 con el mensaje de lectura, sin filtrar el título) | `sign-only-isolation.spec.ts`               |
 | D2  | URL con ids manipulados (documento ajeno bajo el propio equipo, otro equipo, otra organización, propia organización, admin) → bandeja | `sign-only-isolation.spec.ts`               |
 | D3  | Invitado como MEMBER intenta subir: sesión propia con `envelope.create` → 403 y sin control de subida | `sign-only-isolation.spec.ts`               |
 | E1  | Un firmante CONTROLADO (regresión) sigue sin descarga: regla `canDownloadDocument` y ruta de descarga por token → 403. Cobertura amplia en `e2e/api/v2/controlled-signer-file-access.spec.ts` | `sign-only-downloads.spec.ts`               |
-| E2  | Firmante con cuenta SIGN_ONLY no descarga en ninguna superficie: sesión (firmado y original) → 403, token de destinatario → 403, API v1 → 403, la política que consume la UI oculta ambas versiones (con sesión y con token) y la regla de adjunto por destinatario devuelve `false` | `sign-only-downloads.spec.ts`               |
+| E2  | Firmante con cuenta SIGN_ONLY no descarga en ninguna superficie: sesión (firmado y original) → 403, token de destinatario → 403, API v1 → 403, la política que consume la UI oculta ambas versiones (con sesión y con token), la página "Document Signed" no ofrece control de descarga y la regla de adjunto por destinatario devuelve `false` | `sign-only-downloads.spec.ts`               |
 | E3  | Cuenta SIGN_ONLY con privilegios SGC (rol de equipo SGC verificado en BD) tampoco descarga: mismas rutas → 403 y política oculta | `sign-only-downloads.spec.ts`               |
 | E4  | Ver no es descargar: la cuenta restringida abre el visor del documento que firma (`…/dataId/{id}/current/item.pdf` → 200 `application/pdf`) mientras la descarga sigue en 403 | `sign-only-downloads.spec.ts`               |
 | F1  | Promoción SIGN_ONLY→USER desde `/admin/users/{id}` efectiva en la siguiente petición: el token API previo deja de recibir 403 y la carpeta se crea; no se crea organización personal | `sign-only-profile-changes.spec.ts`         |
@@ -40,19 +40,24 @@ pueden cubrir hoy quedan enumerados con el motivo exacto.
 | E5 | "Correo encolado antes de la restricción, enviado después → aplica la política vigente al momento del envío". Es cobertura de jobs (`send-document-completed-emails`), con tests unitarios en M26; la suite no puede controlar cuándo se envía un correo ya encolado.                                                                                                                                              |
 | B (transición espera→pendiente) | Se cubre la clasificación (espera, pendiente, historial) pero no la transición tras firmar el firmante anterior: exige una segunda sesión de firma con otro destinatario. Documentado aquí en vez de improvisarlo.                                                                              |
 
-## Dependencias de merge (M31 / M32)
+## Cierres de los que dependen los specs (ya en develop)
 
-Los specs se apoyan en dos cierres que aterrizan antes que esta rama:
+Los dos cierres residuales están mergeados en `develop` y forman parte de la base de esta rama
+(M31 en `b1a80c9`, M32 en `9d8a8c5`):
 
-- **M31** (descarga residual): la descarga por token de destinatario resuelve la cuenta y deniega
-  con `ACCOUNT_DOWNLOAD_FORBIDDEN`. De ahí las aserciones de E2 por token y las dos llamadas a la
-  política (con sesión y con token).
-- **M32** (lecturas aisladas): las queries de ámbito equipo/organización se rechazan para cuentas
-  restringidas. De ahí las aserciones de lectura de D1 (`document.find`, `envelope.get`,
-  `GET /api/v2/envelope[/{id}]`), con la salvedad de que en la superficie de sesión el cuerpo lleve
-  el `FORBIDDEN` aunque el HTTP sea 200; los helpers lo aceptan.
+- **M31** (descarga residual): la descarga por token de destinatario resuelve la cuenta del
+  destinatario y deniega con `ACCOUNT_DOWNLOAD_FORBIDDEN`; la página de firma y la de "Document
+  Signed" ocultan el control de descarga para una cuenta restringida. De ahí las aserciones de E2
+  por token, las dos llamadas a la política (con sesión y con token) y la ausencia de control en la
+  página de documento firmado.
+- **M32** (lecturas aisladas): las queries de ámbito equipo/organización se rechazan con 403
+  (`RESTRICTED_ACCOUNT_READ_MESSAGE`) y la política de descarga de un visor por token también
+  resuelve la cuenta del destinatario. De ahí las aserciones de lectura de D1 (`document.find`,
+  `envelope.get`, `GET /api/v2/envelope[/{id}]`), que exigen el mensaje de lectura además del
+  código `FORBIDDEN`; en la superficie de sesión el cuerpo lleva el error aunque el HTTP sea 200 en
+  una llamada batcheada, y los helpers lo aceptan.
 
-Fuera de esos dos cierres, la única desviación conocida que queda documentada es:
+La única desviación conocida que queda documentada es:
 
 - **Adjunto de E2.** No hay captura de correo en la suite, así que la mitad "ni adjunto" se afirma
   contra `canAttachDocumentPdfToAddressee` (la función que consultan los envíos), no contra un

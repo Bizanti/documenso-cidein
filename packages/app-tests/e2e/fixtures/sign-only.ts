@@ -42,6 +42,13 @@ export const RESTRICTED_ACCOUNT_MESSAGE =
 export const RESTRICTED_ACCOUNT_DOWNLOAD_MESSAGE =
   'This account is restricted to signing documents which have been shared with it, and cannot download documents.';
 
+/**
+ * The refusal every read outside the signer allowlist answers with for a
+ * restricted account (the team and organisation surfaces).
+ */
+export const RESTRICTED_ACCOUNT_READ_MESSAGE =
+  'This account is restricted to signing documents which have been shared with it, and cannot read the documents or the team data of others.';
+
 type SeedSignOnlyUserOptions = {
   name?: string;
   email?: string;
@@ -267,10 +274,14 @@ export const expectForbiddenResponse = async (response: APIResponse, message: st
  * public API always answers 403. The body carries the decision either way, so
  * the assertion is made there.
  */
-export const expectTrpcQueryRefused = async (response: APIResponse) => {
+export const expectTrpcQueryRefused = async (
+  response: APIResponse,
+  message: string = RESTRICTED_ACCOUNT_READ_MESSAGE,
+) => {
   const body = await response.text();
 
   expect(body, `expected a refusal but got: ${body}`).toContain('FORBIDDEN');
+  expect(body, `expected the read refusal message but got: ${body}`).toContain(message);
 
   if (!response.ok()) {
     expect(response.status()).toBe(403);
