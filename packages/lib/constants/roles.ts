@@ -56,6 +56,13 @@ export const validateRoleCombination = (roles: readonly Role[]) => {
  * Promoting a restricted user replaces the sign only role with the user role
  * instead of adding to it, and never grants the admin role. Any other role is
  * dropped since the restriction wins over inconsistent data.
+ *
+ * @deprecated Promotion is a decision only the caller can take, so this helper
+ * must not be applied to a requested profile: it replaces SIGN_ONLY with USER,
+ * which silently promotes a restricted account whose profile is being edited, or
+ * an account which is being restricted. The administrative role assignment
+ * stores the combination it was given (`validateRoleCombination`) instead. Kept
+ * as public API for the flows which really promote a restricted account.
  */
 export const getRolesAfterPromotion = (roles: readonly Role[]) => {
   if (!roles.includes(Role.SIGN_ONLY)) {
