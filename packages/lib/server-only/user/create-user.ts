@@ -1,9 +1,10 @@
 import { prisma } from '@documenso/prisma';
 import { hash } from '@node-rs/bcrypt';
-import type { User } from '@prisma/client';
+import { Role, type User } from '@prisma/client';
 
 import { SALT_ROUNDS } from '../../constants/auth';
 import { AppError, AppErrorCode } from '../../errors/app-error';
+import { isRestrictedAccount } from '../auth/document-authorization';
 import { createPersonalOrganisation } from '../organisation/create-organisation';
 
 export interface CreateUserOptions {
@@ -32,6 +33,16 @@ export const createUser = async ({ name, email, password, signature }: CreateUse
       email: email.toLowerCase(),
       password: hashedPassword, // Todo: (RR7) Drop password.
       signature,
+      /**
+       * A self service signup hands out the restricted profile: the account may
+       * only sign the documents which are shared with it until an administrator
+       * grants a wider profile.
+       *
+       * The role is passed explicitly instead of inheriting the `USER` default
+       * of the schema, so the profile of a self service account is decided here
+       * rather than by a database default.
+       */
+      roles: [Role.SIGN_ONLY],
     },
   });
 
@@ -56,12 +67,30 @@ export type OnCreateUserHookOptions = {
 };
 
 /**
+ * Which new accounts get a personal organisation, and with it a personal team.
+ *
+ * A restricted account signs the documents shared with it and owns no
+ * workspace: giving it a personal organisation would both contradict the
+ * restriction and leave every sign only signup with an organisation to
+ * administer. Administrators and user profile accounts keep the historical
+ * behaviour of receiving one.
+ *
+ * The check fails safe: roles which are not a valid combination are treated as
+ * restricted, so inconsistent data never grants a personal space.
+ */
+const shouldCreatePersonalOrganisation = (user: Pick<User, 'roles'>, options: OnCreateUserHookOptions): boolean =>
+  !options.skipPersonalOrganisation && !isRestrictedAccount(user);
+
+/**
  * Should be run after a user is created, example during email password signup or google sign in.
+ *
+ * Only the id and the roles of the new account are read, which is also what
+ * makes the decision testable without a full user record.
  *
  * @returns User
  */
-export const onCreateUserHook = async (user: User, options: OnCreateUserHookOptions = {}) => {
-  if (!options.skipPersonalOrganisation) {
+export const onCreateUserHook = async (user: Pick<User, 'id' | 'roles'>, options: OnCreateUserHookOptions = {}) => {
+  if (shouldCreatePersonalOrganisation(user, options)) {
     await createPersonalOrganisation({ userId: user.id });
   }
 

@@ -5,11 +5,12 @@ import {
   ORGANISATION_USER_ACCOUNT_TYPE,
 } from '@documenso/lib/constants/organisations';
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { isRestrictedAccount } from '@documenso/lib/server-only/auth/document-authorization';
 import { addUserToOrganisation } from '@documenso/lib/server-only/organisation/accept-organisation-invitation';
 import { ZOrganisationAccountLinkMetadataSchema } from '@documenso/lib/types/organisation';
 import type { RequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { prisma } from '@documenso/prisma';
-import { UserSecurityAuditLogType } from '@prisma/client';
+import { OrganisationMemberRole, UserSecurityAuditLogType } from '@prisma/client';
 
 export interface LinkOrganisationAccountOptions {
   token: string;
@@ -34,6 +35,7 @@ export const linkOrganisationAccount = async ({ token, requestMeta }: LinkOrgani
         select: {
           id: true,
           emailVerified: true,
+          roles: true,
           accounts: {
             select: {
               provider: true,
@@ -143,11 +145,26 @@ export const linkOrganisationAccount = async ({ token, requestMeta }: LinkOrgani
   // Done outside the above transaction to avoid nested transactions and
   // holding connections during the job trigger network I/O.
   if (!organisationMember) {
+    /**
+     * The organisation role the portal grants is capped for a restricted
+     * account: a privileged role (admin, SGC or manager) on an account which
+     * may only sign would claim permissions the account cannot exercise, and
+     * would misrepresent it in the organisation member list.
+     *
+     * A restricted account therefore joins as a plain member, and both its
+     * profile and its organisation role are widened explicitly by an
+     * administrator. Accounts with a regular profile join with the role the
+     * portal is configured with.
+     */
+    const organisationMemberRole = isRestrictedAccount(user)
+      ? OrganisationMemberRole.MEMBER
+      : organisation.organisationAuthenticationPortal.defaultOrganisationRole;
+
     await addUserToOrganisation({
       userId: user.id,
       organisationId: tokenMetadata.data.organisationId,
       organisationGroups: organisation.groups,
-      organisationMemberRole: organisation.organisationAuthenticationPortal.defaultOrganisationRole,
+      organisationMemberRole,
     });
   }
 };

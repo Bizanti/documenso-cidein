@@ -6,6 +6,7 @@ import { getEmailBlocklistDomains } from '@documenso/lib/server-only/site-settin
 import { onCreateUserHook } from '@documenso/lib/server-only/user/create-user';
 import { formatOrganisationLoginUrl } from '@documenso/lib/utils/organisation-authentication-portal';
 import { prisma } from '@documenso/prisma';
+import { Role } from '@prisma/client';
 import type { Context } from 'hono';
 
 import { AuthenticationErrorCode } from '../errors/error-codes';
@@ -92,6 +93,16 @@ export const handleOAuthOrganisationCallbackUrl = async (options: HandleOAuthOrg
         email: email,
         name: name,
         emailVerified: null, // Do not verify email.
+        /**
+         * An account provisioned by an organisation SSO portal is a new account
+         * like any other, so it starts with the same restricted profile instead
+         * of being handed a wider one because of the origin it signed up from.
+         *
+         * The account therefore joins the organisation as a member (see
+         * `linkOrganisationAccount`) and is widened explicitly by an
+         * administrator once it has to operate inside the organisation.
+         */
+        roles: [Role.SIGN_ONLY],
       },
     });
 

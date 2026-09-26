@@ -11,7 +11,7 @@ import { deletedServiceAccountEmail } from '@documenso/lib/server-only/user/serv
 import { legacyServiceAccountEmail } from '@documenso/lib/server-only/user/service-accounts/legacy-service-account';
 import { isValidReturnTo, normalizeReturnTo } from '@documenso/lib/utils/is-valid-return-to';
 import { prisma } from '@documenso/prisma';
-import { UserSecurityAuditLogType } from '@prisma/client';
+import { Role, UserSecurityAuditLogType } from '@prisma/client';
 import { decodeIdToken, OAuth2Client } from 'arctic';
 import type { Context } from 'hono';
 import { deleteCookie } from 'hono/cookie';
@@ -155,6 +155,13 @@ export const handleOAuthCallbackUrl = async (options: HandleOAuthCallbackUrlOpti
         email: email,
         name: name,
         emailVerified: new Date(),
+        /**
+         * A signup through a social provider is a self service signup, so it
+         * gets the same restricted profile as the email and password flow: the
+         * account may only sign the documents shared with it until an
+         * administrator grants a wider profile.
+         */
+        roles: [Role.SIGN_ONLY],
       },
     });
 
