@@ -4,19 +4,19 @@
  * - A4 (covered): a sign only account opens its inbox, follows the signing
  *   link of a pending document and signs it for real, without being redirected
  *   away and without an error.
- * - B (partially covered): the inbox sections. A document behind a real signer
- *   is listed as waiting (and offers no signing link) while a document behind a
- *   CC is already pending, and a signed document lands in the history with its
- *   status. Moving a waiting document to pending requires the preceding signer
- *   to sign in a second browser context, which is documented as deferred in
- *   `sign-only/README.md`.
+ * - B (covered): the inbox sections. A document behind a real signer is listed
+ *   as waiting (and offers no signing link) while a document behind a CC is
+ *   already pending, and a signed document lands in the history with its
+ *   status. The transition itself is covered too: once the preceding signer
+ *   signs from its own browser context, the waiting document becomes pending
+ *   and hands out a signing link.
  */
 
 import { prisma } from '@documenso/prisma';
 import { seedPendingDocument } from '@documenso/prisma/seed/documents';
 import { seedTestEmail, seedUser } from '@documenso/prisma/seed/users';
 import { expect, test } from '@playwright/test';
-import { DocumentStatus } from '@prisma/client';
+import { DocumentStatus, SigningStatus } from '@prisma/client';
 
 import { apiSeedPendingDocument } from '../fixtures/api-seeds';
 import { apiSignin } from '../fixtures/authentication';
@@ -144,5 +144,100 @@ test('B: the inbox waits behind a real signer and is already actionable behind a
   // A document whose turn has not arrived never carries a signing token.
   await expect(waitingRow.getByTestId('mis-firmas-sign-link')).toHaveCount(0);
 
+  await expect(page.getByTestId('mis-firmas-history').getByTestId('mis-firmas-document')).toHaveCount(0);
+});
+
+test('B: a waiting document turns into a pending one once the preceding signer signs', async ({
+  page,
+  request,
+  browser,
+}) => {
+  const signOnlyUser = await seedSignOnlyUser({ name: 'B Transition Signer' });
+
+  const firstSignerEmail = seedTestEmail();
+
+  // Sequential document with the restricted account as the second signer: its
+  // turn only arrives after the first signature, which is what the transition
+  // asserts. The title is a single document this time, so the sections can only
+  // hold this one row.
+  const { distributeResult } = await apiSeedPendingDocument(request, {
+    title: '[TEST] B waiting to pending',
+    meta: { signingOrder: 'SEQUENTIAL' },
+    recipients: [
+      { email: firstSignerEmail, name: 'First signer', role: 'SIGNER', signingOrder: 1 },
+      { email: signOnlyUser.email, name: 'Sign Only', role: 'SIGNER', signingOrder: 2 },
+    ],
+    fieldsPerRecipient: [[SIGNATURE_FIELD], [SIGNATURE_FIELD]],
+  });
+
+  const firstSigner = distributeResult.recipients.find((recipient) => recipient.email === firstSignerEmail);
+  const restrictedRecipient = distributeResult.recipients.find((recipient) => recipient.email === signOnlyUser.email);
+
+  if (!firstSigner || !restrictedRecipient) {
+    throw new Error('The distribution did not hand out a signing token for both recipients');
+  }
+
+  await apiSignin({ page, email: signOnlyUser.email, redirectPath: '/' });
+
+  await expect(page).toHaveURL(new RegExp(`${SIGN_ONLY_HOME}$`));
+
+  // Before the first signature: the document waits behind the first signer and
+  // is not offered as something to act on.
+  const waitingRow = page.getByTestId('mis-firmas-waiting').getByTestId('mis-firmas-document');
+
+  await expect(waitingRow).toHaveCount(1);
+  await expect(waitingRow).toContainText('[TEST] B waiting to pending');
+  await expect(waitingRow.getByTestId('mis-firmas-sign-link')).toHaveCount(0);
+  await expect(page.getByTestId('mis-firmas-pending').getByTestId('mis-firmas-document')).toHaveCount(0);
+
+  // The first signer signs from its own browser context, the way a recipient
+  // with its own signing session does. The signing link is the one the
+  // distribution handed out, so no email round trip is needed.
+  const firstSignerContext = await browser.newContext();
+
+  try {
+    const firstSignerPage = await firstSignerContext.newPage();
+
+    await firstSignerPage.goto(`/sign/${firstSigner.token}`);
+    await expect(firstSignerPage.getByRole('heading', { name: 'Sign Document' })).toBeVisible();
+
+    await signSignaturePad(firstSignerPage);
+
+    await firstSignerPage.getByRole('button', { name: 'Complete' }).click();
+    await firstSignerPage.waitForTimeout(1000);
+    await firstSignerPage.getByRole('button', { name: 'Sign' }).click({ force: true });
+
+    await firstSignerPage.waitForURL(`/sign/${firstSigner.token}/complete`);
+  } finally {
+    await firstSignerContext.close();
+  }
+
+  await expect
+    .poll(async () => {
+      const recipient = await prisma.recipient.findFirstOrThrow({
+        where: {
+          id: firstSigner.id,
+        },
+      });
+
+      return recipient.signingStatus;
+    })
+    .toBe(SigningStatus.SIGNED);
+
+  // Back to the inbox: the document is still pending (this account has not
+  // signed) but the turn has arrived, so it moved from Waiting to Pending and
+  // now carries the signing link.
+  await page.reload();
+
+  const pendingRow = page.getByTestId('mis-firmas-pending').getByTestId('mis-firmas-document');
+
+  await expect(pendingRow).toHaveCount(1);
+  await expect(pendingRow).toContainText('[TEST] B waiting to pending');
+  await expect(pendingRow.getByTestId('mis-firmas-sign-link')).toHaveAttribute(
+    'href',
+    `/sign/${restrictedRecipient.token}`,
+  );
+
+  await expect(page.getByTestId('mis-firmas-waiting').getByTestId('mis-firmas-document')).toHaveCount(0);
   await expect(page.getByTestId('mis-firmas-history').getByTestId('mis-firmas-document')).toHaveCount(0);
 });
