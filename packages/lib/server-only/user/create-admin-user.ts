@@ -1,4 +1,6 @@
 import { prisma } from '@documenso/prisma';
+import { Role } from '@prisma/client';
+
 import { AppError, AppErrorCode } from '../../errors/app-error';
 
 export interface CreateAdminUserOptions {
@@ -13,6 +15,8 @@ export interface CreateAdminUserOptions {
  * - Leaves the password unset (`null`); the user must set it later via a password reset/onboarding link
  * - Marks the email as verified immediately because this route is only called by admins
  * - Does NOT create a personal organisation (user will be added to real org)
+ * - Hands out the restricted SIGN_ONLY profile, which the administrator can widen
+ *   afterwards from the administration screen
  * - Returns the user immediately without side effects
  */
 export const createAdminUser = async ({ name, email }: CreateAdminUserOptions) => {
@@ -36,6 +40,9 @@ export const createAdminUser = async ({ name, email }: CreateAdminUserOptions) =
       // Verifying the email here instead of the password reset flow to reduce the
       // attack surface. This route is only called by admins.
       emailVerified: new Date(),
+      // Administrative creation is an onboarding into signing: the account starts
+      // restricted and is widened explicitly by an administrator.
+      roles: [Role.SIGN_ONLY],
     },
   });
 

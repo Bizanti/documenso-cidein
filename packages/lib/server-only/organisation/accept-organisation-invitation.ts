@@ -15,6 +15,24 @@ export type AcceptOrganisationInvitationOptions = {
   token: string;
 };
 
+/**
+ * Accept an organisation invitation for the account which holds the invited
+ * email address.
+ *
+ * Accepting an invitation grants organisation membership and nothing else: the
+ * account profile (`User.roles`) is deliberately not written here.
+ *
+ * - A restricted account (SIGN_ONLY) is not promoted by joining an
+ *   organisation, so an invitation is not a way to obtain a wider profile.
+ * - An account which already holds a wider profile is not narrowed by the
+ *   organisation role carried by the invitation, so accepting it never
+ *   downgrades an administrator.
+ * - No personal organisation or team is created: an invited account joins the
+ *   organisation of the invitation, and a restricted account is expected to
+ *   start without a workspace of its own.
+ *
+ * Widening or narrowing a profile stays an explicit administrative action.
+ */
 export const acceptOrganisationInvitation = async ({ token }: AcceptOrganisationInvitationOptions) => {
   const organisationMemberInvite = await prisma.organisationMemberInvite.findFirst({
     where: {
@@ -107,6 +125,11 @@ export const acceptOrganisationInvitation = async ({ token }: AcceptOrganisation
   }
 
   // Todo: Logging
+  /**
+   * Membership only: the account profile is left as it is, so a restricted
+   * account keeps its restriction and an administrator is not narrowed by the
+   * organisation role of the invitation.
+   */
   await addUserToOrganisation({
     userId: user.id,
     organisationId: organisation.id,
