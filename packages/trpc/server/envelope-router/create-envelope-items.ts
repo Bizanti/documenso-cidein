@@ -4,14 +4,14 @@ import { UNSAFE_createEnvelopeItems } from '@documenso/lib/server-only/envelope-
 import { getEnvelopeItemPermissions } from '@documenso/lib/utils/envelope';
 import { prisma } from '@documenso/prisma';
 
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import {
   createEnvelopeItemsMeta,
   ZCreateEnvelopeItemsRequestSchema,
   ZCreateEnvelopeItemsResponseSchema,
 } from './create-envelope-items.types';
 
-export const createEnvelopeItemsRoute = authenticatedProcedure
+export const createEnvelopeItemsRoute = documentManagementProcedure
   .meta(createEnvelopeItemsMeta)
   .input(ZCreateEnvelopeItemsRequestSchema)
   .output(ZCreateEnvelopeItemsResponseSchema)

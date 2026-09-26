@@ -7,7 +7,7 @@ import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { prisma } from '@documenso/prisma';
 import { DocumentDataType, EnvelopeType } from '@prisma/client';
 
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import {
   createDocumentTemporaryMeta,
   ZCreateDocumentTemporaryRequestSchema,
@@ -20,7 +20,7 @@ import {
  * @public
  * @deprecated
  */
-export const createDocumentTemporaryRoute = authenticatedProcedure
+export const createDocumentTemporaryRoute = documentManagementProcedure
   .meta(createDocumentTemporaryMeta)
   .input(ZCreateDocumentTemporaryRequestSchema)
   .output(ZCreateDocumentTemporaryResponseSchema)

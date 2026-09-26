@@ -1,4 +1,4 @@
-import { DocumentStatus, OrganisationMemberRole, RecipientRole, TeamMemberRole } from '@prisma/client';
+import { DocumentStatus, OrganisationMemberRole, RecipientRole, Role, TeamMemberRole } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiRequestMetadata } from '../../universal/extract-request-metadata';
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   prisma: {
     user: {
       findFirstOrThrow: vi.fn(),
+      findMany: vi.fn(),
     },
     envelope: {
       findUnique: vi.fn(),
@@ -267,6 +268,9 @@ describe('resendSignedDocument', () => {
     vi.clearAllMocks();
 
     mocks.prisma.user.findFirstOrThrow.mockResolvedValue(user);
+    // No account behind the addressees by default: the recipient role alone
+    // decides, which is the external recipient case.
+    mocks.prisma.user.findMany.mockResolvedValue([]);
     mocks.getEnvelopeWhereInput.mockResolvedValue({ envelopeWhereInput: { id: envelope.id } });
     mocks.prisma.envelope.findUnique.mockResolvedValue(envelope);
     mocks.getTeamById.mockResolvedValue({ currentTeamRole: TeamMemberRole.ADMIN });
@@ -344,5 +348,56 @@ describe('resendSignedDocument', () => {
         },
       },
     });
+  });
+
+  it('attaches the signed document when the addressee account is unrestricted', async () => {
+    mocks.prisma.user.findMany.mockResolvedValue([{ id: 7, email: recipient.email, roles: [Role.USER] }]);
+
+    await resendSignedDocument(resendOptions);
+
+    expect(mocks.sendMail.mock.calls[0][0].attachments).toEqual([
+      {
+        filename: 'Envelope item.pdf',
+        content: Buffer.from([1, 2, 3]),
+        contentType: 'application/pdf',
+      },
+    ]);
+  });
+
+  it('drops the signed document for an addressee whose account is sign only', async () => {
+    mocks.prisma.user.findMany.mockResolvedValue([{ id: 7, email: recipient.email, roles: [Role.SIGN_ONLY] }]);
+
+    const result = await resendSignedDocument(resendOptions);
+
+    // The email still goes out, only the document is withheld.
+    expect(result).toEqual({ sent: true });
+    expect(mocks.sendMail).toHaveBeenCalledTimes(1);
+    expect(mocks.sendMail.mock.calls[0][0].attachments).toEqual([]);
+  });
+
+  it('drops the signed document when the addressee account lookup fails', async () => {
+    mocks.prisma.user.findMany.mockRejectedValue(new Error('database is down'));
+
+    const result = await resendSignedDocument(resendOptions);
+
+    expect(result).toEqual({ sent: true });
+    expect(mocks.sendMail).toHaveBeenCalledTimes(1);
+    expect(mocks.sendMail.mock.calls[0][0].attachments).toEqual([]);
+  });
+
+  it('does not copy an SGC member whose account is sign only', async () => {
+    mocks.getTeamMembers.mockResolvedValue([
+      teamMember('sgc@example.com', TeamMemberRole.SGC, 'SGC Person'),
+      teamMember('other-sgc@example.com', TeamMemberRole.SGC, 'Other SGC'),
+    ]);
+
+    // The lookup answers for the restricted copy only.
+    mocks.prisma.user.findMany.mockImplementation(async ({ where }: { where: { email: { equals: string } } }) =>
+      where.email.equals === 'sgc@example.com' ? [{ id: 8, email: 'sgc@example.com', roles: [Role.SIGN_ONLY] }] : [],
+    );
+
+    await resendSignedDocument(resendOptions);
+
+    expect(mocks.sendMail.mock.calls[0][0].cc).toEqual([{ address: 'other-sgc@example.com', name: 'Other SGC' }]);
   });
 });

@@ -8,6 +8,7 @@ import { ZSignatureLevelSchema } from '../../types/signature-level';
 import { mapEnvelopeToWebhookDocumentPayload, ZWebhookDocumentSchema } from '../../types/webhook-payload';
 import { nanoid, prefixedId } from '../../universal/id';
 import type { EnvelopeIdOptions } from '../../utils/envelope';
+import { assertCanManageDocumentsById } from '../auth/document-authorization';
 import { getEnvelopeWhereInput } from '../envelope/get-envelope-by-id';
 import { incrementDocumentId, incrementTemplateId } from '../envelope/increment-id';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
@@ -27,6 +28,12 @@ export interface DuplicateEnvelopeOptions {
 }
 
 export const duplicateEnvelope = async ({ id, userId, teamId, overrides }: DuplicateEnvelopeOptions) => {
+  // Refuse to duplicate on behalf of a restricted (sign only) account, with the
+  // roles read fresh from the database. Every duplicate route funnels through
+  // here: document.duplicate, envelope.duplicate, save as template, and the
+  // template router.
+  await assertCanManageDocumentsById({ userId });
+
   const { duplicateAsTemplate = false, includeRecipients = true, includeFields = true } = overrides ?? {};
 
   const { envelopeWhereInput, team } = await getEnvelopeWhereInput({

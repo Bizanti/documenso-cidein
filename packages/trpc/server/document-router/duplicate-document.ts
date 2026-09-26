@@ -1,13 +1,13 @@
 import { duplicateEnvelope } from '@documenso/lib/server-only/envelope/duplicate-envelope';
 
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import {
   duplicateDocumentMeta,
   ZDuplicateDocumentRequestSchema,
   ZDuplicateDocumentResponseSchema,
 } from './duplicate-document.types';
 
-export const duplicateDocumentRoute = authenticatedProcedure
+export const duplicateDocumentRoute = documentManagementProcedure
   .meta(duplicateDocumentMeta)
   .input(ZDuplicateDocumentRequestSchema)
   .output(ZDuplicateDocumentResponseSchema)

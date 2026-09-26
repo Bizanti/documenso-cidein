@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { assertCanManageDocumentsById } from '@documenso/lib/server-only/auth/document-authorization';
 import { getApiTokenByToken } from '@documenso/lib/server-only/public-api/get-api-token-by-token';
 import type { BaseApiLog, RootApiLog } from '@documenso/lib/types/api-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
@@ -68,6 +69,16 @@ export const authenticatedMiddleware = <
         });
       }
 
+      // Every route which is not a read is a write, and a restricted (sign only)
+      // account performs none of them: the same closure `authenticatedMiddleware`
+      // applies to the tRPC surface, applied to the REST one, with the roles read
+      // fresh from the database on every request.
+      const isReadRequest = request.method.toUpperCase() === 'GET';
+
+      if (!isReadRequest) {
+        await assertCanManageDocumentsById({ userId: apiToken.user.id });
+      }
+
       apiLogger.info({
         ...infoToLog,
         userId: apiToken.user.id,
@@ -111,6 +122,20 @@ export const authenticatedMiddleware = <
           } as const;
         }
 
+        // An authorization denial is a 403, not a 401: the caller presented a
+        // valid token, its account is simply not allowed to do this. Every
+        // restricted (sign only) write and download answers through here, so the
+        // REST surface reports the same status the tRPC one does.
+        if (err.code === AppErrorCode.FORBIDDEN) {
+          return {
+            status: 403,
+            body: { message: err.message },
+          } as const;
+        }
+
+        // Anything else keeps the existing contract: a missing or invalid
+        // token, a disabled account, or a handler error, answered with the
+        // error's message.
         message = err.message;
       }
 

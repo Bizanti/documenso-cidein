@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { assertAccountAllowedToDownloadById } from '@documenso/lib/server-only/auth/document-authorization';
 import { getEnvelopeById } from '@documenso/lib/server-only/envelope/get-envelope-by-id';
 import { getPresignGetUrl } from '@documenso/lib/universal/upload/server-actions';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
@@ -36,6 +37,11 @@ export const downloadDocumentBetaRoute = authenticatedProcedure
       userId: user.id,
       teamId,
     });
+
+    // A restricted (sign only) account never downloads, whatever route it uses:
+    // this one hands out a presigned URL, so it has to answer to the account
+    // policy itself. The check reads the roles fresh from the database.
+    await assertAccountAllowedToDownloadById({ userId: user.id });
 
     // This error is done AFTER the get envelope so we can test access controls without S3.
     if (process.env.NEXT_PUBLIC_UPLOAD_TRANSPORT !== 's3') {

@@ -11,6 +11,13 @@ export const ZEnvelopeDownloadPolicySchema = z.object({
   isDownloadWindowExpired: z.boolean(),
   canDownloadSigned: z.boolean(),
   canDownloadOriginal: z.boolean(),
+
+  /**
+   * Why the downloads are closed, when they are: an expired window, a version
+   * which is restricted, or a restricted account. `null` when both versions are
+   * downloadable.
+   */
+  downloadDenialReason: z.string().nullable(),
 });
 
 export type TEnvelopeDownloadPolicy = z.infer<typeof ZEnvelopeDownloadPolicySchema>;

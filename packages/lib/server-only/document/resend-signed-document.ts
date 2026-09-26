@@ -1,3 +1,4 @@
+import { resolveDocumentAttachments } from '@documenso/email/document-attachments';
 import { DocumentResendEmailTemplate } from '@documenso/email/templates/document-resend';
 import { prisma } from '@documenso/prisma';
 import type { TResendSignedDocumentSkipReason } from '@documenso/trpc/server/document-router/resend-signed-document.types';
@@ -25,6 +26,11 @@ import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisat
 import { getTeamById } from '../team/get-team';
 import { getTeamMembers } from '../team/get-team-members';
 import { assertUserNotDisabled } from '../user/assert-user-not-disabled';
+
+import {
+  canAttachDocumentPdfToAddressee,
+  filterAddresseesAllowedToReceiveDocumentPdf,
+} from './document-attachment-policy';
 
 export type ResendSignedDocumentOptions = {
   id: EnvelopeIdOptions;
@@ -282,14 +288,32 @@ export const resendSignedDocument = async ({
   // recorded outside the sender's mailbox.
   const teamMembers = await getTeamMembers({ userId, teamId: envelope.teamId }).catch(() => []);
 
-  const cc = getSignedDocumentResendCc({
+  const ccCandidates = getSignedDocumentResendCc({
     teamMembers,
     recipientEmails: recipientsToDeliver.map((recipient) => recipient.email),
   });
 
+  // The copies are addressees too, and the decision is taken at send time on each
+  // one's own account: a copy whose account may not receive the document is
+  // dropped rather than handed the PDF.
+  const allowedCcAddresses = new Set(
+    await filterAddresseesAllowedToReceiveDocumentPdf(ccCandidates.map((candidate) => candidate.address)),
+  );
+
+  const cc = ccCandidates.filter((candidate) => allowedCcAddresses.has(candidate.address));
+
   await Promise.all(
     recipientsToDeliver.map(async (recipient) => {
       const i18n = await getI18nInstance(emailLanguage);
+
+      // The attachment policy is resolved here, once the addressee is known, and
+      // never from the profile of the account sending the email.
+      const mayReceiveDocuments = await canAttachDocumentPdfToAddressee({
+        email: recipient.email,
+        recipientRole: recipient.role,
+      });
+
+      const attachments = resolveDocumentAttachments(signedDocumentAttachments, mayReceiveDocuments);
 
       const customEmailTemplate = {
         'signer.name': recipient.name,
@@ -302,7 +326,7 @@ export const resendSignedDocument = async ({
         assetBaseUrl,
         downloadLink: `${NEXT_PUBLIC_WEBAPP_URL()}/sign/${recipient.token}/complete`,
         customBody: message ? renderCustomEmailTemplate(message, customEmailTemplate) : undefined,
-        hasAttachment: signedDocumentAttachments.length > 0,
+        hasAttachment: attachments.length > 0,
       });
 
       const [html, text] = await Promise.all([
@@ -330,7 +354,7 @@ export const resendSignedDocument = async ({
         subject: i18n._(msg`Signed document: ${envelope.title}`),
         html,
         text,
-        attachments: signedDocumentAttachments,
+        attachments,
         headers: buildEnvelopeEmailHeaders({
           userId: envelope.userId,
           envelopeId: envelope.id,
