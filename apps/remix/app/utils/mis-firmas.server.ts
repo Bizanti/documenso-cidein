@@ -1,12 +1,7 @@
-import { isCcRecipient, sortRecipientsForSigningOrder } from '@documenso/lib/utils/recipients';
 import { prisma } from '@documenso/prisma';
-import type { Recipient } from '@prisma/client';
-import { DocumentSigningOrder, DocumentStatus, EnvelopeType, RecipientRole, SigningStatus } from '@prisma/client';
+import { DocumentStatus, EnvelopeType, type SigningStatus } from '@prisma/client';
 
-/**
- * The recipient fields required to work out where a signer sits in the signing order.
- */
-type RecipientForSigningOrder = Pick<Recipient, 'id' | 'email' | 'role' | 'signingOrder' | 'signingStatus' | 'token'>;
+import { getSigningInboxSection, isActionableRecipient, NON_ACTIONABLE_RECIPIENT_ROLES } from './mis-firmas-rules';
 
 export type SigningInboxDocument = {
   id: string;
@@ -40,45 +35,11 @@ export type SigningInbox = {
 };
 
 /**
- * Whether the recipient is the one who is allowed to sign at this point in time.
- *
- * Mirrors the server side rule used when a signing link is opened
- * (`getIsRecipientsTurnToSign`), but resolved against recipients which have already been
- * loaded so a list of documents can be classified without a query per row.
- */
-const getIsRecipientTurn = ({
-  recipients,
-  recipient,
-  signingOrder,
-}: {
-  recipients: RecipientForSigningOrder[];
-  recipient: RecipientForSigningOrder;
-  signingOrder: DocumentSigningOrder | null | undefined;
-}) => {
-  // Anything other than a sequential document lets every recipient sign in parallel.
-  if (signingOrder !== DocumentSigningOrder.SEQUENTIAL) {
-    return true;
-  }
-
-  const orderedRecipients = sortRecipientsForSigningOrder(recipients);
-
-  const recipientIndex = orderedRecipients.findIndex((orderedRecipient) => orderedRecipient.id === recipient.id);
-
-  if (recipientIndex === -1) {
-    return false;
-  }
-
-  // CC recipients have no action to take, so they can never block the flow.
-  return orderedRecipients.slice(0, recipientIndex).every((orderedRecipient) => {
-    return isCcRecipient(orderedRecipient) || orderedRecipient.signingStatus === SigningStatus.SIGNED;
-  });
-};
-
-/**
  * Find every document which has been shared with the given user as a signer and split them
  * into the three sections of the "My signatures" inbox.
  *
- * Only documents the user can act on carry a signing token, so the rest of the list never
+ * The classification itself lives in `mis-firmas-rules.ts`; this only loads the documents and
+ * applies it. Only pending documents carry a signing token, so the rest of the list never
  * hands out signing access the user would not otherwise have.
  */
 export const findSigningInbox = async ({ userId }: { userId: number }): Promise<SigningInbox> => {
@@ -102,7 +63,7 @@ export const findSigningInbox = async ({ userId }: { userId: number }): Promise<
         some: {
           email: user.email,
           role: {
-            not: RecipientRole.CC,
+            notIn: NON_ACTIONABLE_RECIPIENT_ROLES,
           },
         },
       },
@@ -147,10 +108,21 @@ export const findSigningInbox = async ({ userId }: { userId: number }): Promise<
 
   for (const envelope of envelopes) {
     const recipient = envelope.recipients.find(
-      (envelopeRecipient) => envelopeRecipient.email === user.email && !isCcRecipient(envelopeRecipient),
+      (envelopeRecipient) => envelopeRecipient.email === user.email && isActionableRecipient(envelopeRecipient),
     );
 
     if (!recipient) {
+      continue;
+    }
+
+    const section = getSigningInboxSection({
+      documentStatus: envelope.status,
+      signingOrder: envelope.documentMeta?.signingOrder,
+      recipients: envelope.recipients,
+      recipient,
+    });
+
+    if (section === 'none') {
       continue;
     }
 
@@ -160,33 +132,12 @@ export const findSigningInbox = async ({ userId }: { userId: number }): Promise<
       createdAt: envelope.createdAt,
       documentStatus: envelope.status,
       recipientStatus: recipient.signingStatus,
-      signingToken: null,
+      signingToken: section === 'pending' ? recipient.token : null,
       senderName: envelope.user.name ?? envelope.user.email,
       senderEmail: envelope.user.email,
     };
 
-    // Signing or rejecting is terminal for the recipient, so the document moves to the
-    // history whatever happens to it afterwards.
-    if (recipient.signingStatus !== SigningStatus.NOT_SIGNED) {
-      signingInbox.completed.push(document);
-      continue;
-    }
-
-    const isRecipientTurn = getIsRecipientTurn({
-      recipients: envelope.recipients,
-      recipient,
-      signingOrder: envelope.documentMeta?.signingOrder,
-    });
-
-    if (isRecipientTurn) {
-      signingInbox.pending.push({
-        ...document,
-        signingToken: recipient.token,
-      });
-      continue;
-    }
-
-    signingInbox.waiting.push(document);
+    signingInbox[section].push(document);
   }
 
   return signingInbox;
