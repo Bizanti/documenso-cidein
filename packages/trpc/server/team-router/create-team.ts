@@ -1,9 +1,9 @@
 import { createTeam } from '@documenso/lib/server-only/team/create-team';
 
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import { ZCreateTeamRequestSchema, ZCreateTeamResponseSchema } from './create-team.types';
 
-export const createTeamRoute = authenticatedProcedure
+export const createTeamRoute = documentManagementProcedure
   // .meta(createOrganisationGroupMeta)
   .input(ZCreateTeamRequestSchema)
   .output(ZCreateTeamResponseSchema)

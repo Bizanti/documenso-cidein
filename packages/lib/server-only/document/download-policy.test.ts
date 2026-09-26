@@ -1,4 +1,4 @@
-import { DocumentStatus, OrganisationMemberRole, TeamMemberRole } from '@prisma/client';
+import { DocumentStatus, OrganisationMemberRole, RecipientRole, Role, TeamMemberRole } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
@@ -6,17 +6,28 @@ import { getMemberOrganisationRole } from '../team/get-member-roles';
 import { getTeamById } from '../team/get-team';
 import {
   buildEnvelopeDownloadPolicy,
+  canDownloadDocument,
   DOWNLOAD_DENIAL_REASON,
   getDownloadWindowExpiresAt,
   getEnvelopeDownloadPolicy,
   getEnvelopeItemDownloadDenial,
   getEnvelopeItemViewDenial,
+  getRecipientDownloadPolicy,
   getUserDownloadPolicy,
   isDownloadWindowExpired,
   isFinalDocumentStatus,
   toDownloadVersion,
 } from './download-policy';
 
+const mocks = vi.hoisted(() => ({
+  prisma: {
+    user: {
+      findUnique: vi.fn(),
+    },
+  },
+}));
+
+vi.mock('@documenso/prisma', () => ({ prisma: mocks.prisma }));
 vi.mock('../site-settings/get-download-window-hours');
 vi.mock('../team/get-member-roles');
 vi.mock('../team/get-team');
@@ -274,6 +285,10 @@ describe('getEnvelopeDownloadPolicy', () => {
 describe('getUserDownloadPolicy', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+
+    // An unrestricted account by default, which is what the window and privilege
+    // rules below are about.
+    mocks.prisma.user.findUnique.mockResolvedValue({ roles: [Role.USER] });
   });
 
   const mockTeamRole = (
@@ -462,6 +477,173 @@ describe('getUserDownloadPolicy', () => {
       canDownloadSigned: true,
       canDownloadOriginal: true,
     });
+  });
+
+  it('closes the downloads of a sign only account, with the roles read fresh from the database', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+
+    // Even a privileged team role does not reopen them.
+    mockTeamRole(TeamMemberRole.SGC);
+
+    mocks.prisma.user.findUnique.mockResolvedValue({ roles: [Role.SIGN_ONLY] });
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.COMPLETED,
+      completedAt,
+    });
+
+    expect(mocks.prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: { roles: true },
+    });
+
+    expect(policy.isAccountDownloadBlocked).toBe(true);
+    expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN,
+    );
+    expect(getEnvelopeItemDownloadDenial({ version: 'original', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN,
+    );
+  });
+
+  it('treats an invalid role combination as restricted', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+
+    mockTeamRole(TeamMemberRole.ADMIN);
+
+    mocks.prisma.user.findUnique.mockResolvedValue({ roles: [Role.USER, Role.SIGN_ONLY] });
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+    });
+
+    expect(policy.isAccountDownloadBlocked).toBe(true);
+  });
+
+  it('closes the downloads when the account no longer exists', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+
+    mockTeamRole(TeamMemberRole.ADMIN);
+
+    mocks.prisma.user.findUnique.mockResolvedValue(null);
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+    });
+
+    expect(policy.isAccountDownloadBlocked).toBe(true);
+  });
+
+  it('keeps the viewer open for a restricted account', async () => {
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+
+    mockTeamRole(TeamMemberRole.SGC);
+
+    mocks.prisma.user.findUnique.mockResolvedValue({ roles: [Role.SIGN_ONLY] });
+
+    const policy = await getUserDownloadPolicy({
+      userId: 1,
+      teamId: 1,
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+    });
+
+    // The download is closed, the rendering used to sign is not: what the viewer
+    // shows can still be kept by whoever sees it, which is why the block lives on
+    // the download and export routes instead.
+    expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN,
+    );
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+    expect(getEnvelopeItemViewDenial({ version: 'initial', policy })).toBeNull();
+  });
+});
+
+describe('canDownloadDocument', () => {
+  it('allows a viewer with neither a recipient role nor an account', () => {
+    expect(canDownloadDocument({})).toBe(true);
+    expect(canDownloadDocument({ recipient: null, account: null })).toBe(true);
+  });
+
+  it('allows the recipient roles which receive the document', () => {
+    expect(canDownloadDocument({ recipient: { role: RecipientRole.SIGNER } })).toBe(true);
+    expect(canDownloadDocument({ recipient: { role: RecipientRole.CC } })).toBe(true);
+    expect(canDownloadDocument({ recipient: { role: RecipientRole.ASSISTANT } })).toBe(true);
+  });
+
+  it('denies a controlled signer', () => {
+    expect(canDownloadDocument({ recipient: { role: RecipientRole.CONTROLLED_SIGNER } })).toBe(false);
+  });
+
+  it('denies a sign only account', () => {
+    expect(canDownloadDocument({ account: { roles: [Role.SIGN_ONLY] } })).toBe(false);
+  });
+
+  it('denies an account whose role combination is not valid', () => {
+    expect(canDownloadDocument({ account: { roles: [] } })).toBe(false);
+    expect(canDownloadDocument({ account: { roles: [Role.USER, Role.SIGN_ONLY] } })).toBe(false);
+  });
+
+  it('allows an unrestricted account', () => {
+    expect(canDownloadDocument({ account: { roles: [Role.USER] } })).toBe(true);
+    expect(canDownloadDocument({ account: { roles: [Role.USER, Role.ADMIN] } })).toBe(true);
+  });
+
+  it('denies when either rule applies', () => {
+    expect(
+      canDownloadDocument({
+        recipient: { role: RecipientRole.CONTROLLED_SIGNER },
+        account: { roles: [Role.USER] },
+      }),
+    ).toBe(false);
+
+    expect(
+      canDownloadDocument({
+        recipient: { role: RecipientRole.SIGNER },
+        account: { roles: [Role.SIGN_ONLY] },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('getRecipientDownloadPolicy', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(getDownloadWindowHours).mockResolvedValue(null);
+  });
+
+  it('closes the download of a controlled signer while the document is still pending', async () => {
+    const policy = await getRecipientDownloadPolicy({
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+      recipientRole: RecipientRole.CONTROLLED_SIGNER,
+    });
+
+    expect(policy.isAccountDownloadBlocked).toBe(true);
+    expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBe(
+      DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN,
+    );
+    // Signing the document still renders it.
+    expect(getEnvelopeItemViewDenial({ version: 'current', policy })).toBeNull();
+  });
+
+  it('leaves the download of a signer to the window rules', async () => {
+    const policy = await getRecipientDownloadPolicy({
+      status: DocumentStatus.PENDING,
+      completedAt: null,
+      recipientRole: RecipientRole.SIGNER,
+    });
+
+    expect(policy.isAccountDownloadBlocked).toBe(false);
+    expect(getEnvelopeItemDownloadDenial({ version: 'signed', policy })).toBeNull();
   });
 });
 

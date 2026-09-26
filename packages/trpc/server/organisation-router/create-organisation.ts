@@ -7,10 +7,10 @@ import { getSubscriptionClaim } from '@documenso/lib/server-only/subscription/ge
 import { INTERNAL_CLAIM_ID } from '@documenso/lib/types/subscription';
 import { prisma } from '@documenso/prisma';
 import { OrganisationType, SubscriptionStatus } from '@prisma/client';
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import { ZCreateOrganisationRequestSchema, ZCreateOrganisationResponseSchema } from './create-organisation.types';
 
-export const createOrganisationRoute = authenticatedProcedure
+export const createOrganisationRoute = documentManagementProcedure
   // .meta(createOrganisationMeta)
   .input(ZCreateOrganisationRequestSchema)
   .output(ZCreateOrganisationResponseSchema)

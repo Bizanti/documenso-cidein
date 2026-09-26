@@ -1,9 +1,9 @@
 import { duplicateEnvelope } from '@documenso/lib/server-only/envelope/duplicate-envelope';
 
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import { ZSaveAsTemplateRequestSchema, ZSaveAsTemplateResponseSchema } from './save-as-template.types';
 
-export const saveAsTemplateRoute = authenticatedProcedure
+export const saveAsTemplateRoute = documentManagementProcedure
   .input(ZSaveAsTemplateRequestSchema)
   .output(ZSaveAsTemplateResponseSchema)
   .mutation(async ({ input, ctx }) => {

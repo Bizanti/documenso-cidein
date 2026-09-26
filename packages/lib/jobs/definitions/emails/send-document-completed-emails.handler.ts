@@ -1,3 +1,4 @@
+import { resolveDocumentAttachments } from '@documenso/email/document-attachments';
 import { DocumentCompletedEmailTemplate } from '@documenso/email/templates/document-completed';
 import { prisma } from '@documenso/prisma';
 import { msg } from '@lingui/core/macro';
@@ -6,6 +7,7 @@ import { createElement } from 'react';
 
 import { getI18nInstance } from '../../../client-only/providers/i18n-server';
 import { NEXT_PUBLIC_WEBAPP_URL } from '../../../constants/app';
+import { canAttachDocumentPdfToAddressee } from '../../../server-only/document/document-attachment-policy';
 import { applyEmailTemplateOverride } from '../../../server-only/email/apply-email-template-override';
 import { getEmailContext } from '../../../server-only/email/get-email-context';
 import { getEmailTemplateOverride } from '../../../server-only/email/get-email-template-override';
@@ -172,7 +174,13 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
       subject: appliedOwnerTemplate.subject,
       html,
       text,
-      attachments: completedDocumentEmailAttachments,
+      // The owner is an addressee of this message, so the policy is resolved on
+      // their own account: a document owned before the account was restricted is
+      // not sent back as an attachment.
+      attachments: resolveDocumentAttachments(
+        completedDocumentEmailAttachments,
+        await canAttachDocumentPdfToAddressee({ email: owner.email }),
+      ),
     });
 
     await prisma.documentAuditLog.create({
@@ -257,13 +265,21 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
         customBody = appliedTemplate.body;
       }
 
+      // Resolved at send time, on the addressee's own account and never on the
+      // sender's: a controlled signer never receives the document, and neither
+      // does a restricted (sign only) account. A lookup which cannot be
+      // completed withholds the document rather than allowing it.
+      const mayReceiveDocuments =
+        !isControlledSigner &&
+        (await canAttachDocumentPdfToAddressee({ email: recipient.email, recipientRole: recipient.role }));
+
       const template = createElement(DocumentCompletedEmailTemplate, {
         documentName: envelope.title,
         assetBaseUrl,
         downloadLink: recipient.email === owner.email ? documentOwnerDownloadLink : downloadLink,
         customBody,
         reportUrl,
-        allowDownload: !isControlledSigner,
+        allowDownload: mayReceiveDocuments,
       });
 
       const [html, text] = await Promise.all([
@@ -290,7 +306,7 @@ export const run = async ({ payload, io }: { payload: TSendDocumentCompletedEmai
             : appliedTemplate.subject,
         html,
         text,
-        attachments: isControlledSigner ? [] : completedDocumentEmailAttachments,
+        attachments: resolveDocumentAttachments(completedDocumentEmailAttachments, mayReceiveDocuments),
       });
 
       await prisma.documentAuditLog.create({

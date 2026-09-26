@@ -1,4 +1,5 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
+import { assertCanManageDocumentsById } from '@documenso/lib/server-only/auth/document-authorization';
 import { getApiTokenByToken } from '@documenso/lib/server-only/public-api/get-api-token-by-token';
 import type { BaseApiLog, RootApiLog } from '@documenso/lib/types/api-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
@@ -66,6 +67,16 @@ export const authenticatedMiddleware = <
         throw new AppError(AppErrorCode.UNAUTHORIZED, {
           message: 'User is disabled',
         });
+      }
+
+      // Every route which is not a read is a write, and a restricted (sign only)
+      // account performs none of them: the same closure `authenticatedMiddleware`
+      // applies to the tRPC surface, applied to the REST one, with the roles read
+      // fresh from the database on every request.
+      const isReadRequest = request.method.toUpperCase() === 'GET';
+
+      if (!isReadRequest) {
+        await assertCanManageDocumentsById({ userId: apiToken.user.id });
       }
 
       apiLogger.info({

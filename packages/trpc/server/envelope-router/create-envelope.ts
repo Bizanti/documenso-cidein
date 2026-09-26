@@ -11,7 +11,7 @@ import type { Logger } from 'pino';
 import { match, P } from 'ts-pattern';
 
 import { insertFormValuesInPdf } from '../../../lib/server-only/pdf/insert-form-values-in-pdf';
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import type { TCreateEnvelopeRequest } from './create-envelope.types';
 import {
   createEnvelopeMeta,
@@ -19,7 +19,7 @@ import {
   ZCreateEnvelopeResponseSchema,
 } from './create-envelope.types';
 
-export const createEnvelopeRoute = authenticatedProcedure
+export const createEnvelopeRoute = documentManagementProcedure
   .meta(createEnvelopeMeta)
   .input(ZCreateEnvelopeRequestSchema)
   .output(ZCreateEnvelopeResponseSchema)

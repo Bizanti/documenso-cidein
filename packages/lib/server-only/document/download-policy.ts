@@ -1,9 +1,15 @@
-import type { TeamMemberRole } from '@prisma/client';
+import type { RecipientRole, Role, TeamMemberRole } from '@prisma/client';
 import { DocumentStatus } from '@prisma/client';
 
 import type { DocumentDataVersion } from '../../types/document';
 import { hasOrganisationSgcDownloadPrivileges } from '../../utils/organisations';
+import { getRecipientRoleCapabilities } from '../../utils/recipients';
 import { hasSgcDownloadPrivileges } from '../../utils/teams';
+import {
+  getAccountRolesById,
+  isRestrictedAccount,
+  RESTRICTED_ACCOUNT_DOWNLOAD_MESSAGE,
+} from '../auth/document-authorization';
 import { getDownloadWindowHours } from '../site-settings/get-download-window-hours';
 import { getMemberOrganisationRole } from '../team/get-member-roles';
 import { getTeamById } from '../team/get-team';
@@ -17,9 +23,52 @@ export type TDocumentDownloadVersion = 'original' | 'signed' | 'pending';
 export const DOWNLOAD_DENIAL_REASON = {
   DOWNLOAD_WINDOW_EXPIRED: 'DOWNLOAD_WINDOW_EXPIRED',
   ORIGINAL_DOWNLOAD_FORBIDDEN: 'ORIGINAL_DOWNLOAD_FORBIDDEN',
+  ACCOUNT_DOWNLOAD_FORBIDDEN: 'ACCOUNT_DOWNLOAD_FORBIDDEN',
 } as const;
 
 export type TDownloadDenialReason = (typeof DOWNLOAD_DENIAL_REASON)[keyof typeof DOWNLOAD_DENIAL_REASON];
+
+type CanDownloadDocumentOptions = {
+  /**
+   * The recipient the viewer is reaching the document through, when there is
+   * one. Controlled signers never download.
+   */
+  recipient?: { role: RecipientRole } | null;
+
+  /**
+   * The account behind the request, with roles read fresh from the database.
+   * Sign only accounts never download.
+   */
+  account?: { roles: readonly Role[] } | null;
+};
+
+/**
+ * Rule O: whether the document may be downloaded by this viewer.
+ *
+ * Two independent restrictions deny a download:
+ *
+ * - the recipient role: a controlled signer signs, and explicitly does not
+ *   receive the document, so it is never handed the bytes;
+ * - the account: a sign only account has no download, wherever it reaches the
+ *   document from.
+ *
+ * The rules are restrictions only: with no recipient and an unrestricted (or
+ * absent) account the answer is yes, and the caller still has to apply its own
+ * window and privilege rules on top.
+ */
+export const canDownloadDocument = ({ recipient, account }: CanDownloadDocumentOptions) => {
+  if (recipient && !getRecipientRoleCapabilities(recipient.role).canDownload) {
+    return false;
+  }
+
+  // An account whose roles are not a known combination is treated as restricted,
+  // the same way the write guard treats it.
+  if (account && isRestrictedAccount({ roles: [...account.roles] })) {
+    return false;
+  }
+
+  return true;
+};
 
 /**
  * Envelope statuses in which the stored document data represents the final
@@ -103,6 +152,16 @@ export type EnvelopeDownloadPolicy = {
 
   canDownloadSigned: boolean;
   canDownloadOriginal: boolean;
+
+  /**
+   * Whether the viewer's own account (or recipient role) takes downloads away
+   * regardless of the window and privilege rules above.
+   *
+   * Kept separate from `canDownload*` because it only closes the download and
+   * export surface: rendering the document to sign it stays allowed, and the
+   * viewer denial is deliberately computed without it.
+   */
+  isAccountDownloadBlocked: boolean;
 };
 
 type GetEnvelopeDownloadPolicyOptions = {
@@ -125,6 +184,19 @@ type GetEnvelopeDownloadPolicyOptions = {
    * instead of their team role. Combined with `role`.
    */
   isOrganisationSgcPrivileged?: boolean;
+
+  /**
+   * Roles of the account behind the request, read fresh from the database. Only
+   * pass a value which came from the database.
+   */
+  accountRoles?: readonly Role[] | null;
+
+  /**
+   * Recipient role of a token viewer, when the caller knows it. Controlled
+   * signers never download.
+   */
+  recipientRole?: RecipientRole | null;
+
   now?: Date;
 };
 
@@ -152,6 +224,8 @@ export const buildEnvelopeDownloadPolicy = ({
   windowHours,
   role,
   isOrganisationSgcPrivileged = false,
+  accountRoles,
+  recipientRole,
   now,
 }: BuildEnvelopeDownloadPolicyOptions): EnvelopeDownloadPolicy => {
   const hasTeamSgcPrivileges = role ? hasSgcDownloadPrivileges(role) : false;
@@ -163,6 +237,11 @@ export const buildEnvelopeDownloadPolicy = ({
     now,
   });
 
+  const isAccountDownloadBlocked = !canDownloadDocument({
+    recipient: recipientRole ? { role: recipientRole } : null,
+    account: accountRoles ? { roles: [...accountRoles] } : null,
+  });
+
   return {
     downloadWindowHours: windowHours,
     downloadWindowExpiresAt: getDownloadWindowExpiresAt({ completedAt, windowHours }),
@@ -170,6 +249,7 @@ export const buildEnvelopeDownloadPolicy = ({
     isSgcPrivileged,
     canDownloadSigned: hasWindowExpired ? isSgcPrivileged : true,
     canDownloadOriginal: isFinalDocumentStatus(status) ? isSgcPrivileged : true,
+    isAccountDownloadBlocked,
   };
 };
 
@@ -182,6 +262,8 @@ export const getEnvelopeDownloadPolicy = async ({
   downloadWindowHours,
   role,
   isOrganisationSgcPrivileged,
+  accountRoles,
+  recipientRole,
   now,
 }: GetEnvelopeDownloadPolicyOptions): Promise<EnvelopeDownloadPolicy> => {
   return buildEnvelopeDownloadPolicy({
@@ -190,6 +272,8 @@ export const getEnvelopeDownloadPolicy = async ({
     windowHours: await resolveDownloadWindowHours(downloadWindowHours),
     role,
     isOrganisationSgcPrivileged,
+    accountRoles,
+    recipientRole,
     now,
   });
 };
@@ -214,6 +298,10 @@ type GetUserDownloadPolicyOptions = {
  *
  * Users outside that team - for example someone reaching an organisation template
  * through another team - are treated as non-privileged.
+ *
+ * The account roles are read fresh from the database on every call, so a sign
+ * only account loses download access on the next download after being restricted,
+ * no matter how long its session lives.
  */
 export const getUserDownloadPolicy = async ({
   userId,
@@ -232,28 +320,40 @@ export const getUserDownloadPolicy = async ({
       }).catch(() => null)
     : null;
 
+  const account = await getAccountRolesById({ userId });
+
   return await getEnvelopeDownloadPolicy({
     ...options,
     role: team?.currentTeamRole ?? null,
     isOrganisationSgcPrivileged: organisationRole !== null && hasOrganisationSgcDownloadPrivileges(organisationRole),
+    // A deleted account cannot reach this point through a session or an API
+    // token, and if it somehow does it downloads nothing.
+    accountRoles: account?.roles ?? [],
   });
 };
 
 /**
  * Resolves the download policy for a recipient (file token) viewer, who never
  * holds team privileges.
+ *
+ * When the caller knows the recipient role it must pass it: controlled signers
+ * never download the document.
  */
 export const getRecipientDownloadPolicy = async ({
   status,
   completedAt,
   downloadWindowHours,
+  recipientRole,
   now,
-}: Omit<GetUserDownloadPolicyOptions, 'userId' | 'teamId'>): Promise<EnvelopeDownloadPolicy> => {
+}: Omit<GetUserDownloadPolicyOptions, 'userId' | 'teamId'> & {
+  recipientRole?: RecipientRole | null;
+}): Promise<EnvelopeDownloadPolicy> => {
   return await getEnvelopeDownloadPolicy({
     status,
     completedAt,
     downloadWindowHours,
     role: null,
+    recipientRole,
     now,
   });
 };
@@ -270,6 +370,12 @@ export const getEnvelopeItemDownloadDenial = ({
   version,
   policy,
 }: GetEnvelopeItemDownloadDenialOptions): TDownloadDenialReason | null => {
+  // The account and recipient restrictions close the download surface outright,
+  // so they are answered before the window and privilege rules.
+  if (policy.isAccountDownloadBlocked) {
+    return DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN;
+  }
+
   if (version === 'original') {
     return policy.canDownloadOriginal ? null : DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN;
   }
@@ -297,12 +403,24 @@ type GetEnvelopeItemViewDenialOptions = {
 
 /**
  * The reason a viewer request must be denied, or `null` when it is allowed.
+ *
+ * The account restriction is deliberately left out: the viewer exists so a
+ * recipient can read the document in order to sign it, and a sign only account
+ * is allowed to sign. What comes out of the viewer can be kept by whoever sees
+ * it; what is not offered is the download route, the export routes and the
+ * attachments.
  */
 export const getEnvelopeItemViewDenial = ({
   version,
   policy,
 }: GetEnvelopeItemViewDenialOptions): TDownloadDenialReason | null => {
-  return getEnvelopeItemDownloadDenial({ version: toDownloadVersion(version), policy });
+  return getEnvelopeItemDownloadDenial({
+    version: toDownloadVersion(version),
+    policy: {
+      ...policy,
+      isAccountDownloadBlocked: false,
+    },
+  });
 };
 
 export const DOWNLOAD_DENIAL_MESSAGE: Record<TDownloadDenialReason, string> = {
@@ -310,4 +428,5 @@ export const DOWNLOAD_DENIAL_MESSAGE: Record<TDownloadDenialReason, string> = {
     'The download window for this document has expired. Only team administrators can download it.',
   [DOWNLOAD_DENIAL_REASON.ORIGINAL_DOWNLOAD_FORBIDDEN]:
     'The original document can only be downloaded by team administrators.',
+  [DOWNLOAD_DENIAL_REASON.ACCOUNT_DOWNLOAD_FORBIDDEN]: RESTRICTED_ACCOUNT_DOWNLOAD_MESSAGE,
 };

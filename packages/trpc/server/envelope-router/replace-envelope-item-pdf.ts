@@ -5,7 +5,7 @@ import { UNSAFE_replaceEnvelopeItemPdf } from '@documenso/lib/server-only/envelo
 import { getEnvelopeItemPermissions } from '@documenso/lib/utils/envelope';
 import { prisma } from '@documenso/prisma';
 
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import {
   ZReplaceEnvelopeItemPdfRequestSchema,
   ZReplaceEnvelopeItemPdfResponseSchema,
@@ -17,7 +17,7 @@ import {
  * If we want to make this public then create a separate one that only allows
  * the PDF to be replaced & doesn't return deleted fields, etc.
  */
-export const replaceEnvelopeItemPdfRoute = authenticatedProcedure
+export const replaceEnvelopeItemPdfRoute = documentManagementProcedure
   .input(ZReplaceEnvelopeItemPdfRequestSchema)
   .output(ZReplaceEnvelopeItemPdfResponseSchema)
   .mutation(async ({ input, ctx }) => {

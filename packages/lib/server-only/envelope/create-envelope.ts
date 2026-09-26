@@ -36,6 +36,7 @@ import { putPdfFileServerSide } from '../../universal/upload/put-file.server';
 import { extractDerivedDocumentMeta } from '../../utils/document';
 import { createDocumentAuthOptions, createRecipientAuthOptions } from '../../utils/document-auth';
 import { buildTeamWhereQuery } from '../../utils/teams';
+import { assertCanManageDocumentsById } from '../auth/document-authorization';
 import { incrementDocumentId, incrementTemplateId } from '../envelope/increment-id';
 import { assertOrganisationRatesAndLimits } from '../rate-limit/assert-organisation-rates-and-limits';
 import { assertCompatibleRecipientRole } from '../signature-level/assert-compatible-recipient-role';
@@ -127,6 +128,11 @@ export const createEnvelope = async ({
   // funnels through here (document.create, envelope.use, template create,
   // embedding template/document create, API v1) and the seed/job paths.
   await assertUserNotDisabledById({ userId });
+
+  // Refuse to create on behalf of a restricted (sign only) account, with the
+  // roles read fresh from the database. Same funnel, and it means a restricted
+  // account cannot upload a PDF through any caller of this function.
+  await assertCanManageDocumentsById({ userId });
 
   const {
     type,

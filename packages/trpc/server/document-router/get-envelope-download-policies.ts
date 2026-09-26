@@ -1,10 +1,14 @@
 import { AppError, AppErrorCode } from '@documenso/lib/errors/app-error';
-import { buildEnvelopeDownloadPolicy } from '@documenso/lib/server-only/document/download-policy';
+import { getAccountRolesById } from '@documenso/lib/server-only/auth/document-authorization';
+import {
+  buildEnvelopeDownloadPolicy,
+  getEnvelopeItemDownloadDenial,
+} from '@documenso/lib/server-only/document/download-policy';
 import { getDownloadWindowHours } from '@documenso/lib/server-only/site-settings/get-download-window-hours';
 import { getTeamById } from '@documenso/lib/server-only/team/get-team';
 import { buildTeamWhereQuery } from '@documenso/lib/utils/teams';
 import { prisma } from '@documenso/prisma';
-import type { TeamMemberRole } from '@prisma/client';
+import type { RecipientRole, TeamMemberRole } from '@prisma/client';
 
 import { procedure } from '../trpc';
 import {
@@ -20,6 +24,12 @@ import {
  * Either a session with team access or one of the recipient tokens is required.
  * Passing `tokens` resolves a whole page of envelopes in a single request, which
  * is what the document tables use to avoid one query per row.
+ *
+ * The policy the UI is handed is the policy the download routes enforce: the
+ * account roles are read fresh from the database and the recipient role of a
+ * token viewer is applied, so a restricted account and a controlled signer are
+ * told they cannot download - and the controls are hidden - instead of finding
+ * out through a 403.
  */
 export const getEnvelopeDownloadPoliciesRoute = procedure
   .input(ZGetEnvelopeDownloadPoliciesRequestSchema)
@@ -82,6 +92,7 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
     // session, so the UI never offers a version the token download route would
     // reject.
     const tokenEnvelopeIds = new Set<string>();
+    const tokenRecipientRoles = new Map<string, RecipientRole>();
 
     if (viewerTokens.length > 0) {
       envelopes.forEach((envelope) => {
@@ -97,11 +108,13 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
         },
         select: {
           envelopeId: true,
+          role: true,
         },
       });
 
       for (const recipient of tokenRecipients) {
         tokenEnvelopeIds.add(recipient.envelopeId);
+        tokenRecipientRoles.set(recipient.envelopeId, recipient.role);
       }
     }
 
@@ -123,13 +136,21 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
       );
     }
 
+    // The roles of the account behind the request, read fresh, so the answer
+    // matches what the download routes will decide on the next request.
+    const account = userId ? await getAccountRolesById({ userId }) : null;
+
     return {
       data: envelopes.map((envelope) => {
+        const isTokenEnvelope = tokenEnvelopeIds.has(envelope.id);
+
         const policy = buildEnvelopeDownloadPolicy({
           status: envelope.status,
           completedAt: envelope.completedAt,
           windowHours: envelope.documentMeta?.downloadWindowHours ?? globalWindowHours,
-          role: tokenEnvelopeIds.has(envelope.id) ? null : (teamRoles.get(envelope.teamId) ?? null),
+          role: isTokenEnvelope ? null : (teamRoles.get(envelope.teamId) ?? null),
+          accountRoles: isTokenEnvelope ? null : (account?.roles ?? null),
+          recipientRole: isTokenEnvelope ? (tokenRecipientRoles.get(envelope.id) ?? null) : null,
         });
 
         return {
@@ -137,8 +158,12 @@ export const getEnvelopeDownloadPoliciesRoute = procedure
           downloadWindowHours: policy.downloadWindowHours,
           downloadWindowExpiresAt: policy.downloadWindowExpiresAt,
           isDownloadWindowExpired: policy.isDownloadWindowExpired,
-          canDownloadSigned: policy.canDownloadSigned,
-          canDownloadOriginal: policy.canDownloadOriginal,
+          canDownloadSigned: policy.canDownloadSigned && !policy.isAccountDownloadBlocked,
+          canDownloadOriginal: policy.canDownloadOriginal && !policy.isAccountDownloadBlocked,
+          downloadDenialReason: getEnvelopeItemDownloadDenial({
+            version: 'signed',
+            policy,
+          }),
         };
       }),
     };

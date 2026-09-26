@@ -7,14 +7,14 @@ import { putNormalizedPdfFileServerSide } from '@documenso/lib/universal/upload/
 import { mapSecondaryIdToDocumentId } from '@documenso/lib/utils/envelope';
 import { EnvelopeType } from '@prisma/client';
 
-import { authenticatedProcedure } from '../trpc';
+import { documentManagementProcedure } from '../trpc';
 import {
   createDocumentMeta,
   ZCreateDocumentRequestSchema,
   ZCreateDocumentResponseSchema,
 } from './create-document.types';
 
-export const createDocumentRoute = authenticatedProcedure
+export const createDocumentRoute = documentManagementProcedure
   .meta(createDocumentMeta)
   .input(ZCreateDocumentRequestSchema)
   .output(ZCreateDocumentResponseSchema)

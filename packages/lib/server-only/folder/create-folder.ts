@@ -4,6 +4,7 @@ import { AppError, AppErrorCode } from '../../errors/app-error';
 import type { TFolderType } from '../../types/folder-type';
 import { FolderType } from '../../types/folder-type';
 import { buildTeamWhereQuery } from '../../utils/teams';
+import { assertCanManageDocumentsById } from '../auth/document-authorization';
 import { getTeamSettings } from '../team/get-team-settings';
 
 export interface CreateFolderOptions {
@@ -21,6 +22,11 @@ export const createFolder = async ({
   parentId,
   type = FolderType.DOCUMENT,
 }: CreateFolderOptions) => {
+  // Refuse to create a folder on behalf of a restricted (sign only) account,
+  // with the roles read fresh from the database. Guards every caller, including
+  // the ones which do not come through the tRPC write closure.
+  await assertCanManageDocumentsById({ userId });
+
   // This indirectly verifies whether the user has access to the team.
   const settings = await getTeamSettings({ userId, teamId });
 

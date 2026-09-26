@@ -1,10 +1,15 @@
 import { AppError, genericErrorCodeToTrpcErrorCodeMap } from '@documenso/lib/errors/app-error';
+import {
+  assertCanManageDocumentsById,
+  isDocumentManagementProcedurePath,
+} from '@documenso/lib/server-only/auth/document-authorization';
 import { getApiTokenByToken } from '@documenso/lib/server-only/public-api/get-api-token-by-token';
 import { assertUserNotDisabled } from '@documenso/lib/server-only/user/assert-user-not-disabled';
 import type { TrpcApiLog } from '@documenso/lib/types/api-logs';
 import type { ApiRequestMetadata } from '@documenso/lib/universal/extract-request-metadata';
 import { alphaid } from '@documenso/lib/universal/id';
 import { isAdmin } from '@documenso/lib/utils/is-admin';
+import type { ProcedureType } from '@trpc/server';
 import { initTRPC, TRPCError } from '@trpc/server';
 import type { AnyZodObject } from 'zod';
 
@@ -70,7 +75,39 @@ const t = initTRPC
 /**
  * Middlewares
  */
-export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, meta }) => {
+
+/**
+ * Refuse a write performed by a restricted account.
+ *
+ * A sign only account is limited to signing the documents shared with it, so
+ * every write it could reach is closed here: the decision is taken per request,
+ * for mutations only, and the roles are read fresh from the database rather than
+ * reused from the session or the API token the request came with. That is what
+ * makes a role change take effect on the very next write instead of surviving
+ * inside a long lived session.
+ *
+ * Reads are untouched, and so are the signer flows: `procedure` and
+ * `maybeAuthenticatedProcedure` are not covered, because signing a field,
+ * completing with a recipient token and accepting an invitation are things a
+ * restricted account must keep doing.
+ */
+const assertRestrictedAccountCannotWrite = async ({
+  userId,
+  type,
+  path,
+}: {
+  userId: number;
+  type: ProcedureType;
+  path: string;
+}) => {
+  if (type !== 'mutation' || !isDocumentManagementProcedurePath(path)) {
+    return;
+  }
+
+  await assertCanManageDocumentsById({ userId });
+};
+
+export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, meta, type }) => {
   // Auth-independent log bindings. `auth` is set per-branch below since it
   // depends on which auth path was taken; `ctx.metadata.auth` here is still
   // `null` (the resolved value is set in the `next()` call below).
@@ -100,6 +137,10 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
     // Reject API requests from a disabled account. The token may still be
     // present in the DB (e.g. before `disableUser` runs) so we enforce here.
     assertUserNotDisabled(apiToken.user);
+
+    // An API token acts as the account it belongs to, so the write closure
+    // applies to the API surface exactly as it does to the session one.
+    await assertRestrictedAccountCannotWrite({ userId: apiToken.user.id, type, path });
 
     const trpcApiV2Logger = ctx.logger.child({
       ...baseLogAttributes,
@@ -149,6 +190,10 @@ export const authenticatedMiddleware = t.middleware(async ({ ctx, next, path, me
   // valid (sessions aren't invalidated by `disableUser`), so we gate every
   // authenticated TRPC call here.
   assertUserNotDisabled(ctx.user);
+
+  // Close every write for a restricted account, reading its roles fresh from the
+  // database instead of trusting the ones the session was created with.
+  await assertRestrictedAccountCannotWrite({ userId: ctx.user.id, type, path });
 
   // Recreate the logger with a sub request ID to differentiate between batched
   // requests, as well as identifying attributes so every subsequent log line
@@ -312,6 +357,12 @@ export const adminMiddleware = t.middleware(async ({ ctx, next, path }) => {
   // Disabled admins shouldn't be able to do anything either.
   assertUserNotDisabled(ctx.user);
 
+  // An administrator whose roles are not a valid combination - for instance one
+  // which also carries the sign only role - is a restricted account, and a
+  // restricted account does not reach the admin surface at all. ADMIN on its own
+  // is a valid combination and passes.
+  await assertCanManageDocumentsById({ userId: ctx.user.id });
+
   const isUserAdmin = isAdmin(ctx.user);
 
   if (!isUserAdmin) {
@@ -394,3 +445,21 @@ export const authenticatedProcedure = t.procedure.use(authenticatedMiddleware);
 // While this is functionally the same as `procedure`, it's useful for indicating purpose
 export const maybeAuthenticatedProcedure = t.procedure.use(maybeAuthenticatedMiddleware);
 export const adminProcedure = t.procedure.use(adminMiddleware);
+
+/**
+ * An `authenticatedProcedure` which also refuses restricted (sign only) accounts
+ * with a 403.
+ *
+ * `authenticatedMiddleware` already applies the closure to every write which is
+ * not self service; mounting it here marks the routes where the closure is part
+ * of the route's contract, and keeps them closed even if a caller reaches the
+ * handler through a chain that skips the shared middleware.
+ *
+ * Use it for every route that creates, modifies or deletes documents, folders,
+ * recipients, teams, organisations, API tokens or webhooks.
+ */
+export const documentManagementProcedure = t.procedure.use(authenticatedMiddleware).use(async ({ ctx, next }) => {
+  await assertCanManageDocumentsById({ userId: ctx.user.id });
+
+  return await next();
+});
